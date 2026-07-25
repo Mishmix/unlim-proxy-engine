@@ -48,8 +48,10 @@ class Scheduler:
 
     async def start(self) -> None:
         await self.checker.detect_own_ip()
-        await self.geo.refresh()
         await self.rebuild_pool()
+        # The geo databases are ~200 MB on a cold start. The `geo_refresh` loop
+        # downloads them in the background; blocking here would keep the API from
+        # answering for minutes. Enrichment simply waits until they land.
         loops: list[tuple[str, Callable[[], Awaitable[None]], int]] = [
             ("scrape", self._scrape_once, self.settings.scraper.interval_sec),
             ("cold", self._cold_once, 1),
