@@ -162,17 +162,27 @@ class Storage:
         after = await self.count("SELECT COUNT(*) FROM proxies")
         return after - before
 
-    async def resolve_protocol(self, proxy_id: int, protocol: str) -> None:
+    async def resolve_protocol(self, proxy_id: int, host: str, port: int, protocol: str) -> int:
         """Rewrite a row whose protocol was `unknown` once the handshake settled it.
 
-        If the resolved triple already exists the placeholder row is dropped instead.
+        Returns the id that represents this proxy from now on. A popular proxy usually
+        arrives twice — labelled by a trustworthy source and unlabelled by a bulk dump —
+        so the resolved triple often already exists. In that case the placeholder is
+        dropped and the caller must record the check against the surviving row, or the
+        successful check is lost entirely.
         """
         try:
             await self.db.execute(
                 "UPDATE proxies SET protocol = ? WHERE id = ?", (protocol, proxy_id)
             )
+            return proxy_id
         except sqlite3.IntegrityError:
+            rows = await self._rows(
+                "SELECT id FROM proxies WHERE host = ? AND port = ? AND protocol = ?",
+                (host, port, protocol),
+            )
             await self.db.execute("DELETE FROM proxies WHERE id = ?", (proxy_id,))
+            return rows[0]["id"] if rows else proxy_id
 
     # ─── check results ─────────────────────────────────────────────────────
 

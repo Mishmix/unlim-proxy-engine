@@ -93,24 +93,30 @@ async def test_checked_proxies_leave_the_cold_queue(storage):
 
 async def test_handshake_result_rewrites_an_unknown_protocol(storage):
     proxy_id = await one_proxy(storage, protocol=None)
-    await storage.resolve_protocol(proxy_id, "socks4")
+    assert await storage.resolve_protocol(proxy_id, "203.0.113.5", 1080, "socks4") == proxy_id
     await storage.commit()
     assert await storage.find("203.0.113.5", 1080, "socks4") is not None
 
 
-async def test_resolving_onto_an_existing_triple_drops_the_placeholder(storage):
+async def test_resolving_onto_an_existing_triple_returns_the_surviving_row(storage):
+    """Regression: the placeholder used to be deleted and its id returned to the caller,
+    so the successful check that triggered the resolve was written to a dead row."""
     await storage.upsert_candidates(
         [
             Candidate("203.0.113.5", 1080, "a", "socks4"),
             Candidate("203.0.113.5", 1080, "b", None),
         ]
     )
-    placeholder = (
-        await storage._rows("SELECT id FROM proxies WHERE protocol = 'unknown'")
-    )[0]["id"]
-    await storage.resolve_protocol(placeholder, "socks4")
+    rows = {r["protocol"]: r["id"] for r in await storage._rows("SELECT id, protocol FROM proxies")}
+    survivor = await storage.resolve_protocol(rows["unknown"], "203.0.113.5", 1080, "socks4")
     await storage.commit()
+
+    assert survivor == rows["socks4"]
     assert await storage.count("SELECT COUNT(*) FROM proxies") == 1
+
+    await storage.record_l1(survivor, True, 800, "1", 1.0, 70.0)
+    await storage.commit()
+    assert await storage.count("SELECT COUNT(*) FROM proxies WHERE checks_ok > 0") == 1
 
 
 async def test_client_report_targets_an_exact_proxy(storage):

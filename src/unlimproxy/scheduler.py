@@ -197,8 +197,11 @@ class Scheduler:
 
     async def _apply_l1(self, proxy: Proxy, result: L1Result) -> None:
         if result.ok and result.protocol and result.protocol != proxy.protocol:
-            # The handshake, not the source's file name, decides the protocol.
-            await self.storage.resolve_protocol(proxy.id, result.protocol)
+            # The handshake, not the source's file name, decides the protocol. Resolving
+            # may merge this row into an existing one, so keep the surviving id.
+            proxy.id = await self.storage.resolve_protocol(
+                proxy.id, proxy.host, proxy.port, result.protocol
+            )
             proxy.protocol = result.protocol
         history = push_history(proxy.history, result.ok)
         ratio = uptime_ratio(history)
