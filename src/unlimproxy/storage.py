@@ -420,7 +420,7 @@ class Storage:
             await self._rows(
                 """SELECT COUNT(*) AS total,
                           SUM(alive) AS alive,
-                          SUM(google_clean) AS google_clean,
+                          SUM(alive AND google_clean) AS google_clean,
                           SUM(fail_streak >= ? AND checks_ok > 0) AS quarantine
                    FROM proxies""",
                 (fail_streak_quarantine,),
