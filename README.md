@@ -285,6 +285,31 @@ quietly fill it with man-in-the-middle nodes — please do not add a switch for 
 
 ---
 
+## A warning about Docker on macOS
+
+Run this on Linux. On a Mac, Docker runs inside a VM whose userspace NAT cannot carry
+hundreds of concurrent outbound connections to arbitrary ports — which is exactly the
+workload here.
+
+Measured on the same machine, same 60 candidates, same minute:
+
+| Where | TCP reachable | Passed the liveness check |
+|---|---:|---:|
+| macOS directly | 28/60 | 4 |
+| Inside the Docker VM | 22/60 | 1 |
+
+Under sustained load the gap widens until it is total: a 15-minute run inside Docker
+Desktop / colima checked 34 000 candidates and found **zero** live proxies, while the
+identical build running natively on the same Mac found thousands.
+
+This is not a limit of the service. On a Linux VPS the container talks to the network
+directly and behaves like the native column. For local development on a Mac, run it
+natively (below), or lower the concurrency a lot:
+
+```bash
+COLD_CONCURRENCY=50 docker compose up -d
+```
+
 ## Running without Docker
 
 ```bash
