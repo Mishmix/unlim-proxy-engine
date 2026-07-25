@@ -267,7 +267,8 @@ class Storage:
             source_order = f"CASE source {branches} ELSE {len(ranked)} END"
             params: tuple[Any, ...] = (*ranked, limit)
         else:
-            source_order, params = "0", (limit,)
+            # A bare integer in ORDER BY is a column ordinal to SQLite, not a constant.
+            source_order, params = "NULL", (limit,)
         return await self._proxies(
             f"""SELECT * FROM proxies WHERE last_check_at IS NULL
                 ORDER BY CASE protocol WHEN 'socks5' THEN 0 WHEN 'socks4' THEN 1
