@@ -9,10 +9,15 @@ services:
     volumes:
       - ./data:/app/data
       - ./config.toml:/app/config.toml:ro
+    # Anything in .env reaches the process: API_KEY and any UNLIMPROXY_* override.
+    env_file:
+      - path: .env
+        required: false
     environment:
       # Leave empty to keep the API open. Set it to require `X-API-Key`.
       API_KEY: "${API_KEY:-}"
       UNLIMPROXY_APP__LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+      UNLIMPROXY_QUEUES__COLD_CONCURRENCY: "${COLD_CONCURRENCY:-400}"
     ulimits:
       nofile:
         soft: 65535
