@@ -326,6 +326,29 @@ ulimit -n 65535
 
 The Docker setup already sets `nofile: 65535`.
 
+### Concurrency and the network in front of you
+
+The defaults open up to ~760 sockets at once across the queues, most of them half-open
+connections to hosts that will never answer. A VPS with a real public IP handles that
+fine. A home or office connection behind consumer NAT usually does not: the NAT table
+fills with pending entries, and then *everything* starts failing — including proxies that
+are perfectly healthy. It looks exactly like a broken pool.
+
+The signature is a pool that is healthy for the first few minutes and then collapses
+toward zero while the cold queue keeps reporting hits. If you see that, cut the
+concurrency:
+
+```bash
+UNLIMPROXY_QUEUES__COLD_CONCURRENCY=100 \
+UNLIMPROXY_QUEUES__WARM_CONCURRENCY=60 \
+UNLIMPROXY_QUEUES__HOT_CONCURRENCY=60 \
+UNLIMPROXY_QUEUES__L2_CONCURRENCY=15 \
+python -m unlimproxy
+```
+
+The path recovers within seconds once the load stops, so it is easy to confirm: stop the
+service and time a plain `curl https://www.google.com/generate_204`.
+
 ### GeoIP databases
 
 Three MaxMind-format databases are downloaded to `data/geo/` on first start and refreshed
