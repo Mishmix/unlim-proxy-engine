@@ -1,0 +1,19 @@
+services:
+  unlimproxy:
+    build: .
+    image: unlimproxy:latest
+    container_name: unlimproxy
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./config.toml:/app/config.toml:ro
+    environment:
+      # Leave empty to keep the API open. Set it to require `X-API-Key`.
+      API_KEY: "${API_KEY:-}"
+      UNLIMPROXY_APP__LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
