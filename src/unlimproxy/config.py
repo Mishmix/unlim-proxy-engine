@@ -70,7 +70,7 @@ class QueuesCfg(BaseModel):
     hot_concurrency: int = 100
     warm_interval_sec: int = 300
     warm_concurrency: int = 200
-    l2_interval_sec: int = 600
+    l2_interval_sec: int = 60
     l2_concurrency: int = 30
     quarantine_interval_sec: int = 1800
     quarantine_concurrency: int = 50
