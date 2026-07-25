@@ -249,19 +249,28 @@ class Storage:
     # ─── queue selection ───────────────────────────────────────────────────
 
     async def fetch_cold(self, limit: int, source_scores: dict[str, float]) -> list[Proxy]:
-        """Never-checked candidates, SOCKS5 → SOCKS4 → unknown → HTTP, then by
-        source hit rate (RESEARCH 1.2: 32 % / 14.5 % / 1.0 %)."""
-        rows = await self._rows(
-            """SELECT * FROM proxies WHERE last_check_at IS NULL
-               ORDER BY CASE protocol WHEN 'socks5' THEN 0 WHEN 'socks4' THEN 1
-                                      WHEN 'unknown' THEN 2 ELSE 3 END, id
-               LIMIT ?""",
-            (limit * 3,),
+        """Never-checked candidates, SOCKS5 → SOCKS4 → unknown → HTTP, then by source
+        hit rate (RESEARCH 1.2: 32 % / 14.5 % / 1.0 %, and 1.4 on junk sources).
+
+        Both orderings have to happen in SQL. Sorting a pre-fetched window in Python
+        does nothing once the backlog is one bad source's 100 000-line dump — every row
+        in the window comes from that same source.
+        """
+        ranked = sorted(source_scores, key=lambda name: -source_scores[name])
+        if ranked:
+            branches = " ".join(f"WHEN ? THEN {rank}" for rank in range(len(ranked)))
+            source_order = f"CASE source {branches} ELSE {len(ranked)} END"
+            params: tuple[Any, ...] = (*ranked, limit)
+        else:
+            source_order, params = "0", (limit,)
+        return await self._proxies(
+            f"""SELECT * FROM proxies WHERE last_check_at IS NULL
+                ORDER BY CASE protocol WHEN 'socks5' THEN 0 WHEN 'socks4' THEN 1
+                                       WHEN 'unknown' THEN 2 ELSE 3 END,
+                         {source_order}, id
+                LIMIT ?""",
+            params,
         )
-        proxies = [Proxy.from_row(r) for r in rows]
-        proxies.sort(key=lambda p: -source_scores.get(p.source or "", 0.0))
-        proxies.sort(key=lambda p: _PROTOCOL_ORDER.get(p.protocol, 3))
-        return proxies[:limit]
 
     async def fetch_hot(self, limit: int) -> list[Proxy]:
         return await self._proxies(
@@ -440,7 +449,6 @@ class Storage:
         return [Proxy.from_row(r) for r in await self._rows(sql, params)]
 
 
-_PROTOCOL_ORDER = {"socks5": 0, "socks4": 1, "unknown": 2, "http": 3}
 
 
 def _minutes_ago(minutes: int) -> str:
