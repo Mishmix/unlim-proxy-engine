@@ -1,0 +1,50 @@
+[project]
+name = "unlimproxy"
+version = "0.1.0"
+description = "Self-hosted free-proxy pool with Google validation and an HTTP API"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.12"
+dependencies = [
+    "aiohttp>=3.10",
+    "aiohttp-socks>=0.9",
+    "aiosqlite>=0.20",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "maxminddb>=2.6",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "aioresponses>=0.7.6",
+    "httpx>=0.27",
+    "ruff>=0.7",
+]
+
+[project.scripts]
+unlimproxy = "unlimproxy.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/unlimproxy"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "C4", "SIM", "ASYNC"]
+ignore = ["B008"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = ["ignore::DeprecationWarning"]

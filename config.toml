@@ -1,0 +1,321 @@
+# Unlim Proxy configuration.
+#
+# Every value here can be overridden by an environment variable named
+# UNLIMPROXY_<SECTION>__<KEY>, e.g. UNLIMPROXY_APP__LOG_LEVEL=DEBUG.
+# API_KEY is read from the plain `API_KEY` env var (see .env.example).
+
+[app]
+db_path = "./data/proxies.db"
+host = "0.0.0.0"
+port = 8000
+log_level = "INFO"
+rotation_cooldown_sec = 30
+rotation_top_n = 20
+
+[scraper]
+interval_sec = 600          # full re-scrape of every source
+concurrency = 10            # parallel source fetches
+timeout_sec = 60
+max_bytes = 33554432        # 32 MiB hard cap per source response
+
+[checker]
+user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
+l1_url = "https://www.google.com/generate_204"
+l2_url = "https://www.google.com/search"
+connect_timeout_sec = 5
+l1_total_timeout_sec = 8
+l2_total_timeout_sec = 12
+l2_min_interval_sec = 600   # never L2-check the same proxy more often than this
+l2_ok_min_bytes = 20000
+l2_partial_min_bytes = 100
+l2_queries = [
+    "weather", "recipe", "python", "news", "dictionary", "map", "train",
+    "coffee", "guitar", "library", "bicycle", "garden", "museum", "sunset",
+]
+anonymity_ip_url = "https://api.ipify.org?format=json"
+anonymity_judge_url = "http://azenv.net/"
+protocol_probe_order = ["socks5", "socks4", "http"]
+
+[queues]
+# Interval = how often the queue is swept. Concurrency = simultaneous checks.
+cold_concurrency = 400
+cold_batch = 2000
+hot_interval_sec = 90
+hot_concurrency = 100
+warm_interval_sec = 300
+warm_concurrency = 200
+l2_interval_sec = 600
+l2_concurrency = 30
+quarantine_interval_sec = 1800
+quarantine_concurrency = 50
+fail_streak_quarantine = 3
+fail_streak_delete = 10
+stale_unseen_days = 7
+
+[geo]
+country_url = "https://media.githubusercontent.com/media/iplocate/ip-address-databases/main/ip-to-country/ip-to-country.mmdb"
+asn_url = "https://media.githubusercontent.com/media/iplocate/ip-address-databases/main/ip-to-asn/ip-to-asn.mmdb"
+city_url = "https://download.db-ip.com/free/dbip-city-lite-{year}-{month}.mmdb.gz"
+dir = "./data/geo"
+refresh_interval_sec = 86400
+download_timeout_sec = 600
+datacenter_keywords = [
+    "hosting", "cloud", "datacenter", "data center", "server", "vps", "vpn",
+    "colo", "ovh", "hetzner", "digitalocean", "amazon", "aws", "google",
+    "microsoft", "azure", "linode", "vultr", "leaseweb", "contabo", "scaleway",
+    "choopa", "oracle", "alibaba", "tencent", "m247", "psychz", "quadranet",
+]
+
+# ───────────────────────────────────────────────────────────────────────────
+# Sources — copied verbatim from the verified list (all HTTP 200 on 25.07.2026).
+#
+# parser:
+#   prefixed — lines like socks5://1.2.3.4:1080 (protocol is trustworthy)
+#   plain    — lines like 1.2.3.4:8080 (protocol is a hypothesis, verified by handshake)
+#   geonode  — JSON API with metadata
+#   hideip   — 1.2.3.4:8080:CountryName
+#
+# trust_protocol = false means: the file name promises a protocol, but the source
+# dumps the same list into every file. Determine the protocol by handshake.
+# ───────────────────────────────────────────────────────────────────────────
+
+# ─── priority: honest protocol labels, high hit rate ───────────────────────
+
+[[sources]]
+name = "proxifly"
+url = "https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/all/data.txt"
+parser = "prefixed"
+trust_protocol = true
+priority = 1
+
+[[sources]]
+name = "proxyscrape_v4"
+url = "https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&proxy_format=protocolipport&format=text"
+parser = "prefixed"
+trust_protocol = true
+priority = 1
+
+[[sources]]
+name = "geonode"
+url = "https://proxylist.geonode.com/api/proxy-list?limit=500&page={page}&sort_by=lastChecked&sort_type=desc"
+parser = "geonode"
+trust_protocol = true
+pages = 6
+priority = 1
+
+[[sources]]
+name = "monosans"
+url = "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/all.txt"
+parser = "prefixed"
+trust_protocol = true
+priority = 1
+
+[[sources]]
+name = "dpangestuw_http"
+url = "https://raw.githubusercontent.com/dpangestuw/Free-Proxy/main/http_proxies.txt"
+parser = "prefixed"
+trust_protocol = true
+priority = 2
+
+[[sources]]
+name = "dpangestuw_socks5"
+url = "https://raw.githubusercontent.com/dpangestuw/Free-Proxy/main/socks5_proxies.txt"
+parser = "prefixed"
+trust_protocol = true
+priority = 2
+
+# ─── single-protocol clean lists ───────────────────────────────────────────
+
+[[sources]]
+name = "hookzof_socks5"
+url = "https://raw.githubusercontent.com/hookzof/socks5_list/master/proxy.txt"
+parser = "plain"
+protocol_hint = "socks5"
+trust_protocol = true
+priority = 1
+
+[[sources]]
+name = "roosterkid_socks5"
+url = "https://raw.githubusercontent.com/roosterkid/openproxylist/main/SOCKS5_RAW.txt"
+parser = "plain"
+protocol_hint = "socks5"
+trust_protocol = true
+priority = 2
+
+[[sources]]
+name = "roosterkid_socks4"
+url = "https://raw.githubusercontent.com/roosterkid/openproxylist/main/SOCKS4_RAW.txt"
+parser = "plain"
+protocol_hint = "socks4"
+trust_protocol = true
+priority = 2
+
+[[sources]]
+name = "roosterkid_https"
+url = "https://raw.githubusercontent.com/roosterkid/openproxylist/main/HTTPS_RAW.txt"
+parser = "plain"
+protocol_hint = "http"
+trust_protocol = true
+priority = 3
+
+[[sources]]
+name = "elliottophellia_http_checked"
+url = "https://raw.githubusercontent.com/elliottophellia/proxylist/master/results/http/global/http_checked.txt"
+parser = "plain"
+protocol_hint = "http"
+trust_protocol = true
+priority = 2
+
+[[sources]]
+name = "elliottophellia_socks5_checked"
+url = "https://raw.githubusercontent.com/elliottophellia/proxylist/master/results/socks5/global/socks5_checked.txt"
+parser = "plain"
+protocol_hint = "socks5"
+trust_protocol = true
+priority = 2
+
+# ─── bulk dumps: protocol label is unreliable, resolve by handshake ────────
+
+[[sources]]
+name = "speedx_socks5"
+url = "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/socks5.txt"
+parser = "plain"
+protocol_hint = "socks5"
+trust_protocol = false
+priority = 3
+
+[[sources]]
+name = "speedx_socks4"
+url = "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/socks4.txt"
+parser = "plain"
+protocol_hint = "socks4"
+trust_protocol = false
+priority = 3
+
+[[sources]]
+name = "speedx_http"
+url = "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt"
+parser = "plain"
+protocol_hint = "http"
+trust_protocol = false
+priority = 4
+
+[[sources]]
+name = "ercin_socks5"
+url = "https://raw.githubusercontent.com/ErcinDedeoglu/proxies/main/proxies/socks5.txt"
+parser = "plain"
+protocol_hint = "socks5"
+trust_protocol = false
+priority = 3
+
+[[sources]]
+name = "ercin_socks4"
+url = "https://raw.githubusercontent.com/ErcinDedeoglu/proxies/main/proxies/socks4.txt"
+parser = "plain"
+protocol_hint = "socks4"
+trust_protocol = false
+priority = 3
+
+[[sources]]
+name = "sevenworks_http"
+url = "https://raw.githubusercontent.com/SevenworksDev/proxy-list/main/proxies/http.txt"
+parser = "plain"
+protocol_hint = "http"
+trust_protocol = false
+priority = 4
+
+[[sources]]
+name = "sevenworks_socks5"
+url = "https://raw.githubusercontent.com/SevenworksDev/proxy-list/main/proxies/socks5.txt"
+parser = "plain"
+protocol_hint = "socks5"
+trust_protocol = false
+priority = 3
+
+[[sources]]
+name = "openproxylist_xyz"
+url = "https://api.openproxylist.xyz/http.txt"
+parser = "plain"
+protocol_hint = "http"
+trust_protocol = false
+priority = 4
+
+[[sources]]
+name = "proxyspace_http"
+url = "https://proxyspace.pro/http.txt"
+parser = "plain"
+protocol_hint = "http"
+trust_protocol = false
+priority = 4
+
+[[sources]]
+name = "proxyspace_socks5"
+url = "https://proxyspace.pro/socks5.txt"
+parser = "plain"
+protocol_hint = "socks5"
+trust_protocol = false
+priority = 3
+
+[[sources]]
+name = "sunny9577_http"
+url = "https://raw.githubusercontent.com/sunny9577/proxy-scraper/master/generated/http_proxies.txt"
+parser = "plain"
+protocol_hint = "http"
+trust_protocol = false
+priority = 4
+
+[[sources]]
+name = "sunny9577_socks5"
+url = "https://raw.githubusercontent.com/sunny9577/proxy-scraper/master/generated/socks5_proxies.txt"
+parser = "plain"
+protocol_hint = "socks5"
+trust_protocol = false
+priority = 3
+
+[[sources]]
+name = "databay_http"
+url = "https://raw.githubusercontent.com/databay-labs/free-proxy-list/master/http.txt"
+parser = "plain"
+protocol_hint = "http"
+trust_protocol = false
+priority = 4
+
+[[sources]]
+name = "vakhov_http"
+url = "https://raw.githubusercontent.com/vakhov/fresh-proxy-list/master/http.txt"
+parser = "plain"
+protocol_hint = "http"
+trust_protocol = false
+priority = 4
+
+[[sources]]
+name = "vakhov_socks5"
+url = "https://raw.githubusercontent.com/vakhov/fresh-proxy-list/master/socks5.txt"
+parser = "plain"
+protocol_hint = "socks5"
+trust_protocol = false
+priority = 3
+
+[[sources]]
+name = "zaeem_https"
+url = "https://raw.githubusercontent.com/Zaeem20/FREE_PROXIES_LIST/master/https.txt"
+parser = "plain"
+protocol_hint = "http"
+trust_protocol = false
+priority = 4
+
+[[sources]]
+name = "zloi_http"
+url = "https://raw.githubusercontent.com/zloi-user/hideip.me/main/http.txt"
+parser = "hideip"
+protocol_hint = "http"
+trust_protocol = false
+priority = 4
+
+[[sources]]
+name = "zloi_socks5"
+url = "https://raw.githubusercontent.com/zloi-user/hideip.me/main/socks5.txt"
+parser = "hideip"
+protocol_hint = "socks5"
+trust_protocol = false
+priority = 3
