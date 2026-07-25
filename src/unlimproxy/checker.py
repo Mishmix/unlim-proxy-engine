@@ -12,6 +12,7 @@ that cannot complete an honest handshake to Google is a proxy we do not want.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import random
@@ -91,6 +92,10 @@ class Checker:
         order: list[Protocol] = (
             [protocol] if protocol in _PROXY_TYPES else list(self.cfg.protocol_probe_order)
         )
+        if len(order) > 1 and not await self._tcp_reachable(host, port):
+            # Most candidates are simply unreachable. One TCP probe settles that for
+            # all three protocols instead of burning three connect timeouts.
+            return L1Result(ok=False)
         for candidate in order:
             started = time.monotonic()
             if await self._request_204(host, port, candidate):
@@ -100,6 +105,18 @@ class Checker:
                     latency_ms=int((time.monotonic() - started) * 1000),
                 )
         return L1Result(ok=False, protocol=protocol if protocol in _PROXY_TYPES else None)
+
+    async def _tcp_reachable(self, host: str, port: int) -> bool:
+        try:
+            _, writer = await asyncio.wait_for(
+                asyncio.open_connection(host, port), self.cfg.connect_timeout_sec
+            )
+        except (OSError, TimeoutError):
+            return False
+        writer.close()
+        with contextlib.suppress(OSError):
+            await writer.wait_closed()
+        return True
 
     async def _request_204(self, host: str, port: int, protocol: str) -> bool:
         try:
