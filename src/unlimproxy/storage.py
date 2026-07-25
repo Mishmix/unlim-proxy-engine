@@ -181,7 +181,6 @@ class Storage:
         proxy_id: int,
         ok: bool,
         latency_ms: int | None,
-        protocol: str | None,
         history: str,
         uptime_ratio: float,
         score: float,
@@ -192,14 +191,13 @@ class Storage:
                 """UPDATE proxies SET alive = 1, alive_streak = alive_streak + 1,
                        fail_streak = 0, checks_total = checks_total + 1,
                        checks_ok = checks_ok + 1, latency_ms = ?, last_check_at = ?,
-                       last_verified_at = ?, history = ?, uptime_ratio = ?, score = ?,
-                       protocol = COALESCE(?, protocol)
+                       last_verified_at = ?, history = ?, uptime_ratio = ?, score = ?
                    WHERE id = ?""",
-                (latency_ms, now, now, history, uptime_ratio, score, protocol, proxy_id),
+                (latency_ms, now, now, history, uptime_ratio, score, proxy_id),
             )
         else:
             await self.db.execute(
-                """UPDATE proxies SET alive = 0, alive_streak = 0,
+                """UPDATE proxies SET alive = 0, alive_streak = 0, google_clean = 0,
                        fail_streak = fail_streak + 1, checks_total = checks_total + 1,
                        last_check_at = ?, history = ?, uptime_ratio = ?, score = ?
                    WHERE id = ?""",
