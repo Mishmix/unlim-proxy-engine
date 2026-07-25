@@ -196,8 +196,13 @@ class Storage:
                 (latency_ms, now, now, history, uptime_ratio, score, proxy_id),
             )
         else:
+            # `google_clean` is deliberately left alone: it records the last L2 verdict,
+            # and a proxy is only re-tested every 10 minutes. Clearing it on every failed
+            # liveness check would wipe the flag on the first flap — with a five-minute
+            # half-life that is nearly every proxy — and nothing could restore it until
+            # the L2 window reopened. Freshness is carried by `last_verified_at`.
             await self.db.execute(
-                """UPDATE proxies SET alive = 0, alive_streak = 0, google_clean = 0,
+                """UPDATE proxies SET alive = 0, alive_streak = 0,
                        fail_streak = fail_streak + 1, checks_total = checks_total + 1,
                        last_check_at = ?, history = ?, uptime_ratio = ?, score = ?
                    WHERE id = ?""",

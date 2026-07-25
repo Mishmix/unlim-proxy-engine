@@ -206,8 +206,6 @@ class Scheduler:
         proxy.uptime_ratio = ratio
         if result.ok:
             proxy.latency_ms = result.latency_ms
-        else:
-            proxy.google_clean = 0
         await self.storage.record_l1(
             proxy.id, result.ok, result.latency_ms, history, ratio, score(proxy, ratio)
         )
