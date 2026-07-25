@@ -119,6 +119,7 @@ class ScrapeResult:
     new: int = 0
     not_modified: bool = False
     error: str | None = None
+    etag: str | None = None
     candidates: list[Candidate] = field(default_factory=list)
 
 

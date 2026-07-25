@@ -375,14 +375,18 @@ class Storage:
         )
         await self.db.commit()
 
-    async def bump_source_alive(self, counts: dict[str, tuple[int, int]]) -> None:
-        """`counts[source] = (alive_delta, google_clean_delta)`."""
-        if not counts:
-            return
-        await self.db.executemany(
-            """UPDATE sources SET alive_total = alive_total + ?,
-                   google_clean_total = google_clean_total + ? WHERE name = ?""",
-            [(alive, clean, name) for name, (alive, clean) in counts.items()],
+    async def recompute_source_totals(self) -> None:
+        """Recount alive/google-clean per source from the proxies table.
+
+        Recomputing is idempotent; incrementing counters from check results would
+        drift as soon as a proxy is rechecked or pruned.
+        """
+        await self.db.execute(
+            """UPDATE sources SET
+                 alive_total = COALESCE((SELECT COUNT(*) FROM proxies p
+                     WHERE p.source = sources.name AND p.checks_ok > 0), 0),
+                 google_clean_total = COALESCE((SELECT COUNT(*) FROM proxies p
+                     WHERE p.source = sources.name AND p.google_status = 'SEARCH_OK'), 0)"""
         )
         await self.db.commit()
 
