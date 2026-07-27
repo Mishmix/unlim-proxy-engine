@@ -70,10 +70,12 @@ FORM: single-line mimic panel, candidate 3 of the grounded list, seed key 7285d8
 
   button, select, input { font: inherit; color: inherit; }
 
-  :is(button, select, a, [tabindex]):focus-visible {
-    outline: 2px solid var(--groove-lit);
-    outline-offset: 2px;
+  :is(button, select, a, th, td, [tabindex]):focus-visible {
+    outline: 2px solid var(--ink-2);
+    outline-offset: 1px;
   }
+
+  [hidden] { display: none !important; }
 
   /* ── chassis header ──────────────────────────────────────────────── */
 
@@ -108,6 +110,7 @@ FORM: single-line mimic panel, candidate 3 of the grounded list, seed key 7285d8
 
   .header-readout { display: flex; gap: 18px; font-size: 11px; color: var(--ink-3); }
   .header-readout b { color: var(--ink-2); font-weight: 400; }
+  .header-readout [data-level="warn"] { color: var(--warn); }
 
   .ghost {
     padding: 5px 10px;
@@ -423,8 +426,8 @@ FORM: single-line mimic panel, candidate 3 of the grounded list, seed key 7285d8
   #offline {
     display: none;
     padding: 9px 14px;
-    background: rgba(217, 86, 76, .1);
-    border: 1px solid rgba(217, 86, 76, .45);
+    background: rgba(226, 104, 94, .09);
+    border: 1px solid rgba(226, 104, 94, .45);
     color: var(--fault);
     font-size: 12px;
   }
@@ -496,6 +499,7 @@ FORM: single-line mimic panel, candidate 3 of the grounded list, seed key 7285d8
     <span>наработка <b class="num" id="hUptime">—</b></span>
     <span>сбор <b class="num" id="hScrape">—</b></span>
     <span>ключ <b class="num" id="hKey">—</b></span>
+    <span id="hWarn" hidden data-level="warn"></span>
   </div>
 
   <div class="link-state"><i class="lamp"></i><span id="hLink">опрос…</span></div>
@@ -504,7 +508,7 @@ FORM: single-line mimic panel, candidate 3 of the grounded list, seed key 7285d8
 </header>
 
 <main>
-  <p id="offline" role="status">Нет связи со службой. Показаны последние полученные значения.</p>
+  <p id="offline" role="status"></p>
 
   <!-- ── the mimic line ────────────────────────────────────────────── -->
   <section class="rack" aria-labelledby="mimicTitle">
@@ -615,7 +619,7 @@ FORM: single-line mimic panel, candidate 3 of the grounded list, seed key 7285d8
 
       <div id="viewPool" role="tabpanel" aria-labelledby="tabPool">
         <h2 class="legend" id="poolTitle" hidden>Пул прокси</h2>
-        <div class="table-scroll">
+        <div class="table-scroll" tabindex="0" role="region" aria-label="Пул прокси">
           <table>
             <thead>
               <tr>
@@ -637,7 +641,7 @@ FORM: single-line mimic panel, candidate 3 of the grounded list, seed key 7285d8
       </div>
 
       <div id="viewLogs" role="tabpanel" aria-labelledby="tabLogs" hidden>
-        <div class="table-scroll">
+        <div class="table-scroll" tabindex="0" role="region" aria-label="Журнал запросов">
           <table>
             <thead>
               <tr><th>Время</th><th>Клиент</th><th>Метод</th><th>Запрос</th><th>Код</th></tr>
@@ -812,6 +816,9 @@ function fallback(text, done) {
 function setLink(ok) {
   document.body.dataset.link = ok ? 'ok' : 'fail';
   $('hLink').textContent = ok ? 'связь есть' : 'нет связи';
+  $('offline').textContent = ok
+    ? ''
+    : 'Нет связи со службой. Показаны последние полученные значения.';
 }
 
 async function api(path) {
@@ -990,8 +997,13 @@ function renderPool() {
     return;
   }
 
+  // `target` is a rendered badge, not an API field.
+  const key = p => sortKey === 'target'
+    ? (p.dual_clean ? 3 : p.parser_clean ? 2 : p.aiohttp_clean ? 1 : 0)
+    : p[sortKey];
+
   const sorted = [...proxies].sort((a, b) => {
-    const av = a[sortKey], bv = b[sortKey];
+    const av = key(a), bv = key(b);
     const cmp = typeof av === 'string' ? av.localeCompare(String(bv)) : (Number(av) || 0) - (Number(bv) || 0);
     return sortAsc ? cmp : -cmp;
   });
@@ -999,7 +1011,8 @@ function renderPool() {
   body.innerHTML = sorted.map(p => `
     <tr>
       <td><span class="tag">${esc(p.protocol)}</span></td>
-      <td class="addr" data-copy="${esc(p.proxy)}" title="Нажмите, чтобы скопировать">${esc(p.proxy)}</td>
+      <td class="addr" data-copy="${esc(p.proxy)}" tabindex="0" role="button"
+          aria-label="Скопировать ${esc(p.proxy)}" title="Скопировать">${esc(p.proxy)}</td>
       <td>${targetTag(p)}</td>
       <td class="dim geo" title="${esc(p.country || '')} ${esc(p.city || '')}">${esc(p.country || '—')}${p.city ? ' · ' + esc(p.city) : ''}</td>
       <td class="dim">${esc(p.anonymity || '—')}</td>
@@ -1014,12 +1027,25 @@ function renderPool() {
     </tr>`).join('');
 }
 
-$('poolBody').addEventListener('click', event => {
+function copyFrom(event) {
   const cell = event.target.closest('[data-copy]');
-  if (cell) copy(cell.dataset.copy, 'Адрес скопирован');
-});
+  if (!cell) return;
+  if (event.type === 'keydown') {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+  }
+  copy(cell.dataset.copy, 'Адрес скопирован');
+}
+
+// Taking an address is the operator's primary task; it cannot be mouse-only.
+$('poolBody').addEventListener('click', copyFrom);
+$('poolBody').addEventListener('keydown', copyFrom);
 
 document.querySelectorAll('th[data-sort]').forEach(th => {
+  th.tabIndex = 0;
+  th.addEventListener('keydown', event => {
+    if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); th.click(); }
+  });
   th.addEventListener('click', () => {
     const key = th.dataset.sort;
     sortAsc = key === sortKey ? !sortAsc : true;
@@ -1067,7 +1093,8 @@ function buildUrl() {
     query.set('limit', type === 'unlimited' ? '100000' : type);
   }
   if (apiKey) query.set('api_key', apiKey);
-  return location.origin + path + '?' + query;
+  const qs = query.toString();
+  return location.origin + path + (qs ? '?' + qs : '');
 }
 
 let countTimer;
@@ -1108,6 +1135,14 @@ async function loadStats() {
   renderMix(d);
   renderSources(d.sources);
 
+  const warnings = [];
+  if (!apiKey) warnings.push('ключ не задан, /v1 открыт');
+  if (d.pool.alive && d.pool.quarantine > d.pool.alive) {
+    warnings.push('карантин ' + int(d.pool.quarantine) + ' > живых ' + int(d.pool.alive));
+  }
+  $('hWarn').textContent = warnings.join(' · ');
+  $('hWarn').hidden = warnings.length === 0;
+
   $('hUptime').textContent = duration(d.uptime_sec);
   $('hScrape').textContent = since(d.last_scrape_at);
 
@@ -1123,6 +1158,12 @@ async function loadProxies() {
   renderPool();
 }
 
+/* Redacted on screen only — the caller sent it, so hiding it in storage would be
+   theatre; the point is that the panel is not what puts the key on a monitor. */
+function maskKey(query) {
+  return String(query).replace(/((?:api_)?key=)[^&]+/gi, '$1***');
+}
+
 async function loadLogs() {
   try {
     const d = await (await api('/v1/logs')).json();
@@ -1133,7 +1174,7 @@ async function loadLogs() {
             <td class="addr dim">${esc(l.time)}</td>
             <td class="addr">${esc(l.client_ip)}</td>
             <td class="dim">${esc(l.method)}</td>
-            <td class="addr dim">${esc(l.path)}${l.query ? '?' + esc(l.query) : ''}</td>
+            <td class="addr dim">${esc(l.path)}${l.query ? '?' + esc(maskKey(l.query)) : ''}</td>
             <td class="addr" style="color:${Number(l.status) < 400 ? 'var(--live)' : 'var(--fault)'}">${Number(l.status) || 0}</td>
           </tr>`).join('')
       : '<tr><td colspan="5" class="empty">Обращений к API ещё не было</td></tr>';

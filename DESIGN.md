@@ -24,7 +24,7 @@ Colour is a signal, never decoration. Anything that is merely structure is grey.
 | `--live` | `#57c98a` | energised, flowing, passing |
 | `--signal` | `#74b6d6` | a measured quantity in flight — rates, throughput |
 | `--warn` | `#d7a441` | degraded but working: stale, partial, quarantined |
-| `--fault` | `#d9564c` | failed, unreachable, rejected |
+| `--fault` | `#e2685e` | failed, unreachable, rejected |
 
 Rules:
 
