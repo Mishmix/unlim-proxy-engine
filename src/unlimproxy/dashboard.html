@@ -1,689 +1,1161 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Unlim Proxy Engine | Protected Dashboard</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg-primary: #0b0f19;
-            --bg-card: rgba(17, 24, 39, 0.75);
-            --border-card: rgba(255, 255, 255, 0.08);
-            --accent-primary: #6366f1;
-            --accent-glow: rgba(99, 102, 241, 0.35);
-            --success-color: #10b981;
-            --danger-color: #ef4444;
-            --text-main: #f3f4f6;
-            --text-muted: #9ca3af;
-        }
+<meta charset="UTF-8">
+<!--
+THESIS: the pool is a process, so the panel draws the process. One mimic line carries
+  sources → backlog → L1 → alive → L2 → Google → YouTube → API, with every reading sitting
+  on the topology at the point it is measured. It refuses the metric-tile grid the
+  category ships, which shows four totals and hides the mechanism that produces them.
+OWN-WORLD: high-performance HMI (ISA-101). Achromatic graphite chassis, 1px engraved
+  grooves, inset highlights where an edge catches light. Colour is state and nothing
+  else: green energised, blue a quantity in flight, amber degraded, red failed. Mono
+  tabular for every measurement, 10px tracked uppercase for engraved legend.
+STORY: in two seconds the operator sees whether the line is flowing and where it is
+  narrow; then they take a filtered API URL and go back to their own code.
+FIRST VIEWPORT: chassis header with the connection lamp, then the full-width mimic line
+  at the top of the page — the largest thing on screen — then the instrument strip, then
+  the pool table beside the URL builder.
+FORM: single-line mimic panel, candidate 3 of the grounded list, seed key 7285d859.
+-->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Unlim Proxy — щит управления</title>
+<style>
+  :root {
+    --ground: #16181b;
+    --panel: #1c1f22;
+    --panel-lift: #23272b;
+    --groove: #2c3136;
+    --groove-lit: #3b4249;
+    --ink: #e2e6e9;
+    --ink-2: #9aa1a7;
+    --ink-3: #868e94;
+    --live: #57c98a;
+    --signal: #74b6d6;
+    --warn: #d7a441;
+    --fault: #e2685e;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Ubuntu, Cantarell, sans-serif;
+    --edge: inset 0 1px 0 rgba(255, 255, 255, .035);
+  }
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-        }
+  * { box-sizing: border-box; }
 
-        body {
-            background-color: var(--bg-primary);
-            background-image: 
-                radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
-                radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.1) 0px, transparent 50%);
-            color: var(--text-main);
-            min-height: 100vh;
-            padding: 24px;
-        }
+  html { scrollbar-color: var(--groove-lit) var(--ground); }
 
-        .container {
-            max-width: 1320px;
-            margin: 0 auto;
-        }
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background:
+      repeating-linear-gradient(180deg, transparent 0 3px, rgba(255, 255, 255, .008) 3px 4px),
+      var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 13px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
 
-        header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding-bottom: 20px;
-            border-bottom: 1px solid var(--border-card);
-            margin-bottom: 24px;
-        }
+  h1, h2, h3 { margin: 0; font-weight: 500; }
 
-        .logo-box {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
+  .legend {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .09em;
+    color: var(--ink-2);
+  }
 
-        .logo-icon {
-            width: 42px;
-            height: 42px;
-            background: linear-gradient(135deg, #6366f1, #10b981);
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            font-size: 20px;
-            color: white;
-            box-shadow: 0 0 15px var(--accent-glow);
-        }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 
-        .brand-title {
-            font-size: 22px;
-            font-weight: 700;
-            background: linear-gradient(90deg, #fff, #9ca3af);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
+  button, select, input { font: inherit; color: inherit; }
 
-        .status-badge {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 6px 14px;
-            background: rgba(16, 185, 129, 0.1);
-            border: 1px solid rgba(16, 185, 129, 0.2);
-            border-radius: 20px;
-            font-size: 13px;
-            font-weight: 500;
-            color: var(--success-color);
-        }
+  :is(button, select, a, [tabindex]):focus-visible {
+    outline: 2px solid var(--groove-lit);
+    outline-offset: 2px;
+  }
 
-        .pulse-dot {
-            width: 8px;
-            height: 8px;
-            background-color: var(--success-color);
-            border-radius: 50%;
-            box-shadow: 0 0 8px var(--success-color);
-        }
+  /* ── chassis header ──────────────────────────────────────────────── */
 
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-            gap: 16px;
-            margin-bottom: 24px;
-        }
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+    padding: 10px 20px;
+    background: var(--ground);
+    border-bottom: 1px solid var(--groove);
+  }
 
-        .stat-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border-card);
-            border-radius: 16px;
-            padding: 20px;
-            backdrop-filter: blur(12px);
-        }
+  .nameplate { display: flex; align-items: baseline; gap: 10px; margin-right: auto; }
+  .nameplate h1 { font-family: var(--mono); font-size: 15px; letter-spacing: -.01em; }
+  .nameplate span { font-size: 10px; text-transform: uppercase; letter-spacing: .09em; color: var(--ink-3); }
 
-        .stat-label {
-            font-size: 12px;
-            color: var(--text-muted);
-            margin-bottom: 8px;
-            text-transform: uppercase;
-        }
+  .link-state { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--ink-2); }
 
-        .stat-value {
-            font-size: 28px;
-            font-weight: 700;
-            color: #ffffff;
-        }
+  .lamp {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--ink-3);
+    box-shadow: inset 0 1px 1px rgba(0, 0, 0, .5);
+  }
 
-        .stat-sub {
-            font-size: 12px;
-            color: var(--success-color);
-            margin-top: 4px;
-        }
+  [data-link="ok"] .lamp { background: var(--live); }
+  [data-link="fail"] .lamp { background: var(--fault); }
+  [data-link="fail"] .link-state { color: var(--fault); }
 
-        .card-box {
-            background: var(--bg-card);
-            border: 1px solid var(--border-card);
-            border-radius: 16px;
-            padding: 24px;
-            margin-bottom: 24px;
-            backdrop-filter: blur(12px);
-        }
+  .header-readout { display: flex; gap: 18px; font-size: 11px; color: var(--ink-3); }
+  .header-readout b { color: var(--ink-2); font-weight: 400; }
 
-        .section-title {
-            font-size: 16px;
-            font-weight: 600;
-            margin-bottom: 16px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
+  .ghost {
+    padding: 5px 10px;
+    background: none;
+    border: 1px solid var(--groove);
+    color: var(--ink-2);
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .ghost:hover { background: var(--panel-lift); color: var(--ink); }
 
-        .key-tag {
-            background: rgba(99, 102, 241, 0.15);
-            border: 1px solid rgba(99, 102, 241, 0.3);
-            color: #818cf8;
-            padding: 4px 10px;
-            border-radius: 6px;
-            font-family: monospace;
-            font-size: 12px;
-        }
+  /* ── layout ───────────────────────────────────────────────────────── */
 
-        .link-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            background: rgba(0, 0, 0, 0.3);
-            border: 1px solid var(--border-card);
-            padding: 14px 16px;
-            border-radius: 10px;
-            margin-bottom: 12px;
-            gap: 12px;
-        }
+  main { padding: 20px; display: grid; gap: 20px; max-width: 1680px; margin: 0 auto; }
 
-        .link-info {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-            flex: 1;
-            overflow: hidden;
-        }
+  .rack {
+    background: var(--panel);
+    border: 1px solid var(--groove);
+    box-shadow: var(--edge);
+  }
 
-        .link-name {
-            font-size: 14px;
-            font-weight: 600;
-        }
+  .rack > .rack-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--groove);
+  }
 
-        .link-url {
-            font-size: 12px;
-            color: #818cf8;
-            font-family: monospace;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
+  .rack-head .note { font-size: 11px; color: var(--ink-3); }
 
-        .btn {
-            background: var(--accent-primary);
-            color: white;
-            border: none;
-            padding: 8px 14px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: 500;
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-        }
+  /* ── the mimic line ───────────────────────────────────────────────── */
 
-        .btn:hover {
-            opacity: 0.9;
-        }
+  .mimic {
+    display: flex;
+    align-items: stretch;
+    padding: 22px 14px 18px;
+    overflow-x: auto;
+  }
 
-        .btn-outline {
-            background: transparent;
-            border: 1px solid var(--border-card);
-            color: var(--text-main);
-        }
+  .stage { display: flex; flex-direction: column; gap: 6px; min-width: 108px; flex: 0 0 auto; }
+  .stage-legend { font-size: 10px; text-transform: uppercase; letter-spacing: .09em; color: var(--ink-2); }
 
-        .btn-outline:hover {
-            background: rgba(255, 255, 255, 0.05);
-        }
+  .stage-value {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 26px;
+    line-height: 1.1;
+    letter-spacing: -.02em;
+    color: var(--ink-3);
+  }
 
-        .controls-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 12px;
-            margin-bottom: 16px;
-        }
+  .stage[data-state="on"] .stage-value { color: var(--ink); }
+  .stage[data-role="alive"][data-state="on"] .stage-value,
+  .stage[data-role="google"][data-state="on"] .stage-value,
+  .stage[data-role="youtube"][data-state="on"] .stage-value { color: var(--live); }
 
-        .select-input {
-            width: 100%;
-            background: rgba(0, 0, 0, 0.4);
-            border: 1px solid var(--border-card);
-            border-radius: 8px;
-            padding: 10px 12px;
-            color: white;
-            font-size: 13px;
-            outline: none;
-        }
+  .stage-sub { font-size: 11px; color: var(--ink-3); }
 
-        .select-input option {
-            background: #111827;
-            color: white;
-        }
+  .level {
+    height: 4px;
+    margin-top: 2px;
+    background: rgba(0, 0, 0, .35);
+    border: 1px solid var(--groove);
+  }
+  .level > i { display: block; height: 100%; background: var(--ink-3); }
+  .stage[data-state="on"] .level > i { background: var(--signal); }
 
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 14px;
-            text-align: left;
-        }
+  .bus-cell {
+    flex: 1 1 60px;
+    min-width: 56px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 0 10px;
+  }
 
-        th {
-            padding: 12px 16px;
-            color: var(--text-muted);
-            border-bottom: 1px solid var(--border-card);
-            font-weight: 500;
-        }
+  .bus-rate {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 11px;
+    color: var(--ink-3);
+    white-space: nowrap;
+    text-align: center;
+  }
+  .bus-cell[data-flow="on"] .bus-rate { color: var(--signal); }
 
-        td {
-            padding: 12px 16px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-        }
+  .bus {
+    position: relative;
+    height: 2px;
+    margin-top: 15px;
+    background: var(--groove-lit);
+    overflow: hidden;
+  }
 
-        .badge {
-            padding: 3px 8px;
-            border-radius: 6px;
-            font-size: 11px;
-            font-weight: 600;
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-        }
-        .badge-socks5 { background: rgba(99, 102, 241, 0.2); color: #818cf8; }
-        .badge-socks4 { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
-        .badge-http { background: rgba(16, 185, 129, 0.2); color: #34d399; }
-        .badge-target-dual { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
-        .badge-target-yt { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
-        .badge-target-aio { background: rgba(99, 102, 241, 0.2); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3); }
-        .badge-200 { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+  .bus-cell[data-flow="on"] .bus { background: rgba(87, 201, 138, .22); }
 
-        .toast {
-            position: fixed;
-            bottom: 24px;
-            right: 24px;
-            background: var(--accent-primary);
-            color: white;
-            padding: 12px 20px;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-            display: none;
-            font-size: 14px;
-            z-index: 10000;
-        }
+  .bus-cell[data-flow="on"] .bus::after {
+    content: '';
+    position: absolute;
+    top: 0; bottom: 0; left: -18px; right: -18px;
+    background: repeating-linear-gradient(90deg, transparent 0 12px, var(--live) 12px 18px);
+    animation: flow 1.15s linear infinite;
+  }
 
-        .tabs-bar {
-            display: flex;
-            gap: 12px;
-            margin-bottom: 16px;
-            border-bottom: 1px solid var(--border-card);
-            padding-bottom: 12px;
-        }
+  @keyframes flow { from { transform: translateX(0); } to { transform: translateX(18px); } }
 
-        .tab-btn {
-            background: transparent;
-            border: none;
-            color: var(--text-muted);
-            padding: 8px 16px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-        }
+  .bus-note { font-size: 10px; color: var(--ink-3); text-align: center; }
 
-        .tab-btn.active {
-            background: var(--accent-primary);
-            color: white;
-        }
-    </style>
+  /* ── instrument strip ─────────────────────────────────────────────── */
+
+  .strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .strip > section { padding: 12px 14px 14px; border-right: 1px solid var(--groove); }
+  .strip > section:last-child { border-right: 0; }
+
+  .instrument-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+  .instrument-head .scale { font-family: var(--mono); font-size: 10px; color: var(--ink-3); }
+
+  canvas { display: block; width: 100%; height: 64px; }
+
+  .axis {
+    display: flex;
+    justify-content: space-between;
+    padding-top: 4px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--ink-3);
+  }
+
+  .trace-empty { height: 64px; display: grid; place-items: center; font-size: 11px; color: var(--ink-3); }
+
+  .breakdown { display: grid; gap: 7px; }
+  .breakdown .row { display: grid; grid-template-columns: 74px 1fr 46px; gap: 10px; align-items: center; }
+  .breakdown .k { font-size: 11px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .breakdown .track { height: 6px; background: rgba(0, 0, 0, .35); border: 1px solid var(--groove); }
+  .breakdown .track > i { display: block; height: 100%; background: var(--signal); }
+  .breakdown .v { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 11px; color: var(--ink-2); text-align: right; }
+
+  /* ── work area ────────────────────────────────────────────────────── */
+
+  .work { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 20px; align-items: start; }
+
+  .tabs { display: flex; gap: 0; }
+  .tab {
+    padding: 8px 14px;
+    background: none;
+    border: 0;
+    border-right: 1px solid var(--groove);
+    color: var(--ink-3);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .09em;
+    cursor: pointer;
+  }
+  .tab[aria-selected="true"] { background: var(--panel-lift); color: var(--ink); box-shadow: var(--edge); }
+  .tab:hover { color: var(--ink); }
+
+  .table-scroll { max-height: 620px; overflow: auto; }
+
+  table { width: 100%; border-collapse: collapse; }
+
+  th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 8px 9px;
+    background: var(--panel-lift);
+    border-bottom: 1px solid var(--groove);
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: .09em;
+    color: var(--ink-2);
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  th[data-sort] { cursor: pointer; user-select: none; }
+  th[data-sort]:hover { color: var(--ink); }
+  th[aria-sort] { color: var(--ink); }
+  th[aria-sort]::after { content: ' ↓'; color: var(--signal); }
+  th[aria-sort="ascending"]::after { content: ' ↑'; }
+
+  td {
+    padding: 6px 9px;
+    border-bottom: 1px solid rgba(44, 49, 54, .55);
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  tbody tr:hover td { background: rgba(255, 255, 255, .022); }
+  .addr { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink); }
+  .dim { color: var(--ink-3); }
+
+  /* Geo is the one cell with unbounded text; it yields before the readings do. */
+  td.geo { max-width: 190px; overflow: hidden; text-overflow: ellipsis; }
+
+  /* The address is both the datum and the thing you came to take, so it is the
+     copy target. A separate button column pushed the readings off-screen. */
+  td.addr[data-copy] { cursor: copy; }
+  td.addr[data-copy]:hover { color: var(--signal); }
+  td.addr[data-copy]::after {
+    content: ' ⧉';
+    color: var(--ink-3);
+    opacity: 0;
+  }
+  tr:hover td.addr[data-copy]::after { opacity: 1; }
+
+  .tag {
+    display: inline-block;
+    padding: 1px 6px;
+    border: 1px solid var(--groove-lit);
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--ink-2);
+  }
+  .tag[data-on="live"] { color: var(--live); border-color: rgba(87, 201, 138, .45); }
+  .tag[data-on="signal"] { color: var(--signal); border-color: rgba(116, 182, 214, .45); }
+  .tag[data-on="off"] { color: var(--ink-3); border-color: var(--groove); }
+
+  .score { display: flex; align-items: center; gap: 7px; }
+  .score .bar { width: 40px; height: 4px; background: rgba(0, 0, 0, .35); border: 1px solid var(--groove); }
+  .score .bar > i { display: block; height: 100%; background: var(--signal); }
+
+  .age[data-fresh="stale"] { color: var(--warn); }
+
+  .empty { padding: 34px 14px; text-align: center; color: var(--ink-3); font-size: 12px; }
+
+  /* ── builder ──────────────────────────────────────────────────────── */
+
+  .builder { padding: 14px; display: grid; gap: 14px; }
+  .field { display: grid; gap: 5px; }
+
+  select {
+    padding: 8px 10px;
+    background: var(--panel-lift);
+    border: 1px solid var(--groove);
+    box-shadow: var(--edge);
+    color: var(--ink);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  select:hover { border-color: var(--groove-lit); }
+
+  .output {
+    padding: 10px;
+    background: #121417;
+    border: 1px solid var(--groove);
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1.6;
+    color: var(--signal);
+    word-break: break-all;
+    max-height: 132px;
+    overflow: auto;
+  }
+
+  .builder-actions { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+
+  .builder-actions button, .builder-actions a {
+    padding: 9px 12px;
+    background: var(--panel-lift);
+    border: 1px solid var(--groove-lit);
+    box-shadow: var(--edge);
+    color: var(--ink);
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .builder-actions button:hover, .builder-actions a:hover { background: #2a2f34; }
+  .builder-actions button:active { background: var(--panel); box-shadow: none; }
+
+  .match { display: flex; justify-content: space-between; gap: 12px; font-size: 11px; color: var(--ink-3); }
+  .match b { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink-2); font-weight: 400; }
+
+  /* ── sources ──────────────────────────────────────────────────────── */
+
+  .sources { max-height: 210px; overflow: auto; }
+  .sources td, .sources th { font-size: 11px; padding: 5px 10px; }
+
+  /* ── toast ────────────────────────────────────────────────────────── */
+
+  #toast {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translate(-50%, 14px);
+    padding: 9px 16px;
+    background: var(--panel-lift);
+    border: 1px solid var(--groove-lit);
+    box-shadow: 0 6px 22px rgba(0, 0, 0, .45);
+    font-size: 12px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .16s ease-out, transform .16s ease-out;
+  }
+  #toast[data-show="1"] { opacity: 1; transform: translate(-50%, 0); }
+
+  /* ── offline band ─────────────────────────────────────────────────── */
+
+  #offline {
+    display: none;
+    padding: 9px 14px;
+    background: rgba(217, 86, 76, .1);
+    border: 1px solid rgba(217, 86, 76, .45);
+    color: var(--fault);
+    font-size: 12px;
+  }
+  [data-link="fail"] #offline { display: block; }
+
+  /* ── responsive ───────────────────────────────────────────────────── */
+
+  @media (max-width: 1180px) {
+    .work { grid-template-columns: minmax(0, 1fr); }
+    .strip { grid-template-columns: minmax(0, 1fr); }
+    .strip > section { border-right: 0; border-bottom: 1px solid var(--groove); }
+    .strip > section:last-child { border-bottom: 0; }
+  }
+
+  @media (max-width: 720px) {
+    main { padding: 12px; gap: 12px; }
+    header { padding: 10px 12px; gap: 10px 14px; }
+    .nameplate span { display: none; }
+    .header-readout { width: 100%; order: 3; gap: 14px; flex-wrap: wrap; }
+
+    /* The line rotates rather than collapsing: every reading survives, and the bus
+       becomes a continuous spine down the left with the stages hanging off it. */
+    .mimic { flex-direction: column; padding: 16px 14px; overflow-x: visible; }
+    .stage { min-width: 0; padding-left: 22px; }
+    .bus-cell {
+      flex: 0 0 auto;
+      flex-direction: row;
+      align-items: center;
+      gap: 12px;
+      padding: 4px 0;
+    }
+    .bus {
+      width: 2px;
+      height: 46px;
+      margin: 0 0 0 7px;
+      flex: 0 0 auto;
+    }
+    .bus-cell[data-flow="on"] .bus::after {
+      left: 0; right: 0; top: -18px; bottom: -18px;
+      background: repeating-linear-gradient(180deg, transparent 0 12px, var(--live) 12px 18px);
+      animation-name: flow-v;
+    }
+    .bus-rate, .bus-note { text-align: left; }
+    .bus-note { color: var(--ink-2); }
+    .table-scroll { max-height: 460px; }
+  }
+
+  @media (max-width: 400px) {
+    .stage-value { font-size: 22px; }
+  }
+
+  @keyframes flow-v { from { transform: translateY(0); } to { transform: translateY(18px); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::after { transition: none !important; animation: none !important; }
+    .bus-cell[data-flow="on"] .bus::after { background: var(--live); }
+  }
+</style>
 </head>
-<body>
-    <div class="container">
-        <header>
-            <div class="logo-box">
-                <div class="logo-icon">P</div>
-                <div>
-                    <div class="brand-title">UNLIM PROXY ENGINE</div>
-                    <div style="font-size: 12px; color: var(--text-muted);">Dual-Check Rotator & Live API</div>
-                </div>
-            </div>
-            <div style="display: flex; gap: 12px; align-items: center;">
-                <span class="key-tag" id="currentKeyTag">Key: --</span>
-                <button class="btn btn-outline" onclick="logout()">🔒 Выйти</button>
-                <a href="/docs" target="_blank" class="btn btn-outline">📘 API Docs</a>
-                <div class="status-badge">
-                    <div class="pulse-dot"></div>
-                    ONLINE
-                </div>
-            </div>
-        </header>
+<body data-link="ok">
 
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-label">Всего кандидатов</div>
-                <div class="stat-value" id="statTotal">--</div>
-                <div class="stat-sub">С 30 паблик источников</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">Живой Пул (Alive)</div>
-                <div class="stat-value" style="color: var(--success-color);" id="statAlive">--</div>
-                <div class="stat-sub" id="statAliveSub">Свежесть &lt; 5 минут</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">Скорость чекинга</div>
-                <div class="stat-value" id="statSpeed">--</div>
-                <div class="stat-sub">проверок в минуту</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">Средний Пинг</div>
-                <div class="stat-value" id="statLatency">--</div>
-                <div class="stat-sub">время отклика</div>
-            </div>
-        </div>
+<header>
+  <div class="nameplate">
+    <h1>UNLIM&nbsp;PROXY</h1>
+    <span>щит управления</span>
+  </div>
 
-        <!-- Custom Links Generator -->
-        <div class="card-box">
-            <div class="section-title">
-                <span>🔗 Конструктор Готовых Ссылок (Со вшитым API-Ключом)</span>
-                <span style="font-size: 12px; font-weight: normal; color: var(--text-muted);">Ключ автоматически подставлен</span>
-            </div>
+  <div class="header-readout">
+    <span>наработка <b class="num" id="hUptime">—</b></span>
+    <span>сбор <b class="num" id="hScrape">—</b></span>
+    <span>ключ <b class="num" id="hKey">—</b></span>
+  </div>
 
-            <div class="controls-grid">
-                <div>
-                    <label style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px; display: block;">Целевой модуль:</label>
-                    <select id="selTarget" class="select-input" onchange="buildCustomUrl()">
-                        <option value="parser">Парсер YouTube</option>
-                        <option value="aiohttp">Чекер каналов (aiohttp direct)</option>
-                        <option value="youtube">YouTube: обе проверки (Dual)</option>
-                            <option value="google">Обычный Google Clean</option>
-                    </select>
-                </div>
+  <div class="link-state"><i class="lamp"></i><span id="hLink">опрос…</span></div>
+  <a class="ghost" href="/docs">API</a>
+  <button class="ghost" id="signOut" type="button">Выйти</button>
+</header>
 
-                <div>
-                    <label style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px; display: block;">Количество / Лимит:</label>
-                    <select id="selType" class="select-input" onchange="buildCustomUrl()">
-                        <option value="unlimited">♾️ ВСЕ прокси БЕЗ ЛИМИТА (Unlimited)</option>
-                        <option value="single">1 Ротированный Прокси (/v1/proxy)</option>
-                        <option value="50">Список из 50 Прокси (/v1/proxies)</option>
-                        <option value="100">Список из 100 Прокси (/v1/proxies)</option>
-                        <option value="500">Список из 500 Прокси (/v1/proxies)</option>
-                    </select>
-                </div>
+<main>
+  <p id="offline" role="status">Нет связи со службой. Показаны последние полученные значения.</p>
 
-                <div>
-                    <label style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px; display: block;">Формат выгрузки:</label>
-                    <select id="selFormat" class="select-input" onchange="buildCustomUrl()">
-                        <option value="txt">TXT (одна строка = 1 прокси)</option>
-                        <option value="json">JSON</option>
-                        <option value="csv">CSV</option>
-                    </select>
-                </div>
-
-                <div>
-                    <label style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px; display: block;">Протокол:</label>
-                    <select id="selProto" class="select-input" onchange="buildCustomUrl()">
-                        <option value="all">Все (SOCKS5 / SOCKS4 / HTTP)</option>
-                        <option value="socks5">Только SOCKS5</option>
-                        <option value="socks4">Только SOCKS4</option>
-                        <option value="http">Только HTTP</option>
-                    </select>
-                </div>
-            </div>
-
-            <div class="link-row">
-                <div class="link-info">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                        <span class="link-name" id="customName">Персональная ссылка выгрузки:</span>
-                        <span id="builderCountBadge" style="font-size: 13px; font-weight: 600; color: var(--success-color);">Найдено подходящих прокси: -- шт.</span>
-                    </div>
-                    <div class="link-url" id="customUrl">--</div>
-                </div>
-                <div style="display: flex; gap: 8px;">
-                    <button class="btn btn-outline" onclick="copyText('customUrl')">📋 Копировать</button>
-                    <a href="#" id="customOpenBtn" target="_blank" class="btn">📥 Открыть</a>
-                </div>
-            </div>
-        </div>
-
-        <!-- Tabs: Proxy Pool vs API Logs -->
-        <div class="tabs-bar">
-            <button class="tab-btn active" id="tabProxyBtn" onclick="switchTab('proxies')">⚡ Свежий Пул Прокси</button>
-            <button class="tab-btn" id="tabLogsBtn" onclick="switchTab('logs')">📜 Журнал Запросов (API Logs)</button>
-        </div>
-
-        <!-- Proxies Table -->
-        <div class="card-box" id="tabProxiesView">
-            <div class="section-title">
-                <span>Свежие проверенные прокси в реальном времени</span>
-                <span id="proxyCountBadge" style="font-size: 12px; font-weight: 500; color: var(--success-color);">Отображается прокси: --</span>
-            </div>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Протокол</th>
-                        <th>Прокси (IP:Port)</th>
-                        <th>Назначение (Target)</th>
-                        <th>Страна</th>
-                        <th>Анонимность</th>
-                        <th>Задержка</th>
-                        <th>Балл</th>
-                        <th>Свежесть</th>
-                    </tr>
-                </thead>
-                <tbody id="proxyTableBody">
-                    <tr><td colspan="8" style="text-align:center; padding: 24px; color: var(--text-muted);">Загрузка прокси...</td></tr>
-                </tbody>
-            </table>
-        </div>
-
-        <!-- API Logs Table -->
-        <div class="card-box" id="tabLogsView" style="display: none;">
-            <div class="section-title">Последние входящие запросы к серверу API (API Request Logs)</div>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Время</th>
-                        <th>IP Клиента</th>
-                        <th>Метод</th>
-                        <th>Эндпоинт / Путь</th>
-                        <th>Статус</th>
-                    </tr>
-                </thead>
-                <tbody id="logsTableBody">
-                    <tr><td colspan="5" style="text-align:center; padding: 24px; color: var(--text-muted);">Загрузка логов...</td></tr>
-                </tbody>
-            </table>
-        </div>
+  <!-- ── the mimic line ────────────────────────────────────────────── -->
+  <section class="rack" aria-labelledby="mimicTitle">
+    <div class="rack-head">
+      <h2 class="legend" id="mimicTitle">технологическая линия</h2>
+      <span class="note">слева направо: сбор адресов → проверка живости → проверка google → проверка youtube → выдача</span>
     </div>
 
-    <div class="toast" id="toast">Ссылка скопирована в буфер обмена!</div>
+    <div class="mimic">
+      <div class="stage" data-role="sources" data-state="on">
+        <span class="stage-legend">источники</span>
+        <b class="stage-value num" id="sSources">—</b>
+        <span class="stage-sub" id="sSourcesSub">списков в опросе</span>
+      </div>
 
-    <script>
-        const host = window.location.origin;
+      <div class="bus-cell" data-flow="off">
+        <span class="bus-rate" id="bScrape">—</span>
+        <span class="bus"></span>
+        <span class="bus-note">сбор</span>
+      </div>
 
-        function getKey() {
-            const params = new URLSearchParams(window.location.search);
-            const queryKey = params.get('api_key') || params.get('key');
-            if (queryKey) {
-                localStorage.setItem('unlim_api_key', queryKey);
-                return queryKey;
-            }
-            return localStorage.getItem('unlim_api_key') || '';
-        }
+      <div class="stage" data-role="backlog">
+        <span class="stage-legend">бэклог</span>
+        <b class="stage-value num" id="sBacklog">—</b>
+        <span class="stage-sub" id="sBacklogSub">ждут первой проверки</span>
+        <span class="level"><i id="lBacklog" style="width:0"></i></span>
+      </div>
 
-        const apiKey = getKey();
-        if (!apiKey) {
-            window.location.href = host + '/';
-        } else {
-            document.getElementById('currentKeyTag').innerText = 'Key: ' + apiKey.substring(0, 12) + '...';
-        }
+      <div class="bus-cell" data-flow="off">
+        <span class="bus-rate" id="bL1">—</span>
+        <span class="bus"></span>
+        <span class="bus-note">L1 · живость</span>
+      </div>
 
-        function logout() {
-            localStorage.removeItem('unlim_api_key');
-            window.location.href = host + '/';
-        }
+      <div class="stage" data-role="alive">
+        <span class="stage-legend">живые</span>
+        <b class="stage-value num" id="sAlive">—</b>
+        <span class="stage-sub" id="sAliveSub">в пуле сейчас</span>
+      </div>
 
-        function getHeaders() {
-            return apiKey ? { 'X-API-Key': apiKey } : {};
-        }
+      <div class="bus-cell" data-flow="off">
+        <span class="bus-rate" id="bL2">—</span>
+        <span class="bus"></span>
+        <span class="bus-note">L2 · google</span>
+      </div>
 
-        async function updateBuilderCount() {
-            const target = document.getElementById('selTarget').value;
-            const proto = document.getElementById('selProto').value;
-            let checkUrl = `${host}/v1/proxies?target=${target}&limit=100000`;
-            if (proto !== 'all') checkUrl += `&protocol=${proto}`;
+      <div class="stage" data-role="google">
+        <span class="stage-legend">google ok</span>
+        <b class="stage-value num" id="sGoogle">—</b>
+        <span class="stage-sub" id="sGoogleSub">страница поиска отдаётся</span>
+      </div>
 
-            try {
-                const res = await fetch(checkUrl, { headers: getHeaders() });
-                if (res.ok) {
-                    const data = await res.json();
-                    const list = data.proxies || data;
-                    document.getElementById('builderCountBadge').innerText = `Подходящих прокси по фильтрам: ${list.length} шт.`;
-                }
-            } catch (e) {}
-        }
+      <div class="bus-cell" data-flow="off">
+        <span class="bus-rate" id="bYt">—</span>
+        <span class="bus"></span>
+        <span class="bus-note">youtube</span>
+      </div>
 
-        function buildCustomUrl() {
-            const target = document.getElementById('selTarget').value;
-            const type = document.getElementById('selType').value;
-            const format = document.getElementById('selFormat').value;
-            const proto = document.getElementById('selProto').value;
+      <div class="stage" data-role="youtube">
+        <span class="stage-legend">youtube ok</span>
+        <b class="stage-value num" id="sYoutube">—</b>
+        <span class="stage-sub">поиск и канал</span>
+      </div>
+    </div>
+  </section>
 
-            // `google` is the google_clean flag, not a ?target= value — sending it as
-            // one is rejected with a 422.
-            const selector = target === 'google' ? 'google_clean=true' : `target=${target}`;
-            const path = type === 'single' ? '/v1/proxy' : '/v1/proxies';
-            const limit = type === 'unlimited' ? 100000 : type;
+  <!-- ── instruments ───────────────────────────────────────────────── -->
+  <section class="rack strip">
+    <section aria-labelledby="iTrace">
+      <div class="instrument-head">
+        <h3 class="legend" id="iTrace">проверок в минуту</h3>
+        <span class="scale" id="traceScale">—</span>
+      </div>
+      <canvas id="traceChecks" height="64" aria-hidden="true"></canvas>
+      <div class="axis"><span>−6 мин</span><span>сейчас</span></div>
+      <p class="trace-empty" id="traceEmpty">накопление — история ведётся с момента открытия панели</p>
+    </section>
 
-            let url = `${host}${path}?${selector}&api_key=${encodeURIComponent(apiKey)}`;
-            if (type !== 'single') url += `&format=${format}&limit=${limit}`;
-            if (proto !== 'all') url += `&protocol=${proto}`;
+    <section aria-labelledby="iAlive">
+      <div class="instrument-head">
+        <h3 class="legend" id="iAlive">живых в пуле</h3>
+        <span class="scale" id="aliveScale">—</span>
+      </div>
+      <canvas id="traceAlive" height="64" aria-hidden="true"></canvas>
+      <div class="axis"><span>−6 мин</span><span>сейчас</span></div>
+      <p class="trace-empty" id="aliveEmpty">накопление — история ведётся с момента открытия панели</p>
+    </section>
 
-            document.getElementById('customUrl').innerText = url;
-            document.getElementById('customOpenBtn').href = url;
+    <section aria-labelledby="iMix">
+      <div class="instrument-head">
+        <h3 class="legend" id="iMix">состав пула</h3>
+        <span class="scale" id="mixScale">—</span>
+      </div>
+      <div class="breakdown" id="mix"></div>
+    </section>
+  </section>
 
-            updateBuilderCount();
-        }
+  <!-- ── work area ─────────────────────────────────────────────────── -->
+  <div class="work">
+    <section class="rack" aria-labelledby="poolTitle">
+      <div class="rack-head" style="padding:0">
+        <div class="tabs" role="tablist" aria-label="Содержимое">
+          <button class="tab" id="tabPool" role="tab" aria-selected="true" aria-controls="viewPool">Пул</button>
+          <button class="tab" id="tabLogs" role="tab" aria-selected="false" aria-controls="viewLogs">Журнал запросов</button>
+        </div>
+        <span class="note" id="poolCount" style="padding-right:14px"></span>
+      </div>
 
-        async function fetchStats() {
-            try {
-                const res = await fetch(host + '/v1/stats', { headers: getHeaders() });
-                if (!res.ok) return;
-                const data = await res.json();
-                document.getElementById('statTotal').innerText = (data.pool.total || 0).toLocaleString();
-                document.getElementById('statAlive').innerText = (data.pool.alive || 0).toLocaleString();
-                document.getElementById('statSpeed').innerText = (data.checks.l1_per_min || 0) + ' / мин';
-                
-                const socks5 = data.by_protocol.socks5 || 0;
-                const socks4 = data.by_protocol.socks4 || 0;
-                const http = data.by_protocol.http || 0;
-                document.getElementById('statAliveSub').innerText = `SOCKS5: ${socks5} | SOCKS4: ${socks4} | HTTP: ${http}`;
-            } catch (e) {}
-        }
+      <div id="viewPool" role="tabpanel" aria-labelledby="tabPool">
+        <h2 class="legend" id="poolTitle" hidden>Пул прокси</h2>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th data-sort="protocol">Прот.</th>
+                <th data-sort="proxy">Адрес</th>
+                <th data-sort="target">Youtube</th>
+                <th data-sort="country">Гео</th>
+                <th data-sort="anonymity">Аноним.</th>
+                <th data-sort="latency_ms" aria-sort="ascending">Задержка</th>
+                <th data-sort="score">Оценка</th>
+                <th data-sort="age_sec">Возраст</th>
+              </tr>
+            </thead>
+            <tbody id="poolBody">
+              <tr><td colspan="8" class="empty">Загрузка…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
 
-        async function fetchProxies() {
-            try {
-                const res = await fetch(host + '/v1/proxies?limit=100', { headers: getHeaders() });
-                if (!res.ok) return;
-                const data = await res.json();
-                const proxies = data.proxies || data;
-                
-                if (Array.isArray(proxies)) {
-                    document.getElementById('proxyCountBadge').innerText = `Отображается прокси: ${proxies.length}`;
+      <div id="viewLogs" role="tabpanel" aria-labelledby="tabLogs" hidden>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr><th>Время</th><th>Клиент</th><th>Метод</th><th>Запрос</th><th>Код</th></tr>
+            </thead>
+            <tbody id="logsBody">
+              <tr><td colspan="5" class="empty">Загрузка…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
 
-                    let latencies = proxies.map(p => p.latency_ms).filter(l => l > 0);
-                    let avgLat = latencies.length ? Math.round(latencies.reduce((a,b) => a+b, 0) / latencies.length) : '--';
-                    document.getElementById('statLatency').innerText = avgLat !== '--' ? avgLat + ' ms' : '--';
+    <div style="display:grid;gap:20px">
+      <section class="rack" aria-labelledby="builderTitle">
+        <div class="rack-head"><h2 class="legend" id="builderTitle">выдача · сборка ссылки</h2></div>
+        <div class="builder">
+          <div class="field">
+            <label class="legend" for="selTarget">Под какую задачу</label>
+            <select id="selTarget">
+              <option value="">Любые живые</option>
+              <option value="google">Прошли проверку Google</option>
+              <option value="parser">YouTube: страница поиска</option>
+              <option value="aiohttp">YouTube: HTML канала</option>
+              <option value="youtube">YouTube: обе проверки</option>
+            </select>
+          </div>
 
-                    const tbody = document.getElementById('proxyTableBody');
-                    tbody.innerHTML = '';
-                    if (proxies.length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding: 24px; color: var(--text-muted);">Идет пополнение пула...</td></tr>';
-                        return;
-                    }
-                    proxies.forEach(p => {
-                        const row = document.createElement('tr');
-                        const badgeClass = p.protocol === 'socks5' ? 'badge-socks5' : (p.protocol === 'socks4' ? 'badge-socks4' : 'badge-http');
-                        
-                        let targetBadge = '<span class="badge badge-http">⚪ Не проверен</span>';
-                        if (p.parser_clean && p.aiohttp_clean) {
-                            targetBadge = '<span class="badge badge-target-dual">🌐 Все задачи (Dual)</span>';
-                        } else if (p.parser_clean) {
-                            targetBadge = '<span class="badge badge-target-yt">🟢 Парсер</span>';
-                        } else if (p.aiohttp_clean) {
-                            targetBadge = '<span class="badge badge-target-aio">🔵 aiohttp</span>';
-                        }
+          <div class="field">
+            <label class="legend" for="selType">Сколько отдавать</label>
+            <select id="selType">
+              <option value="single">Один, с ротацией — /v1/proxy</option>
+              <option value="50">Список 50</option>
+              <option value="100" selected>Список 100</option>
+              <option value="500">Список 500</option>
+              <option value="unlimited">Весь пул, без лимита</option>
+            </select>
+          </div>
 
-                        row.innerHTML = `
-                            <td><span class="badge ${badgeClass}">${esc(p.protocol)}</span></td>
-                            <td style="font-family: monospace; font-weight: 600;">${esc(p.proxy)}</td>
-                            <td>${targetBadge}</td>
-                            <td>${esc(p.country || 'GLOBAL')} (${esc(p.country_name || 'World')})</td>
-                            <td>${esc(p.anonymity || '—')}</td>
-                            <td>${Number(p.latency_ms) || 0} ms</td>
-                            <td style="color: var(--success-color); font-weight: 600;">${Number(p.score) || 0}</td>
-                            <td>${Number(p.age_sec) || 0} сек назад</td>
-                        `;
-                        tbody.appendChild(row);
-                    });
-                }
-            } catch (e) {}
-        }
+          <div class="field">
+            <label class="legend" for="selProto">Протокол</label>
+            <select id="selProto">
+              <option value="all">Любой</option>
+              <option value="socks5">socks5</option>
+              <option value="socks4">socks4</option>
+              <option value="http">http</option>
+            </select>
+          </div>
 
-        async function fetchLogs() {
-            try {
-                const res = await fetch(host + '/v1/logs', { headers: getHeaders() });
-                if (!res.ok) return;
-                const data = await res.json();
-                const tbody = document.getElementById('logsTableBody');
-                tbody.innerHTML = '';
-                if (!data.logs || data.logs.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 24px; color: var(--text-muted);">Логи пока пустые...</td></tr>';
-                    return;
-                }
-                data.logs.forEach(l => {
-                    const row = document.createElement('tr');
-                    row.innerHTML = `
-                        <td style="color: var(--text-muted); font-family: monospace;">${esc(l.time)}</td>
-                        <td style="font-family: monospace; font-weight: 600;">${esc(l.client_ip)}</td>
-                        <td><span class="badge badge-socks5">${esc(l.method)}</span></td>
-                        <td style="font-family: monospace; color: #818cf8;">${esc(l.path)}${l.query ? '?' + esc(l.query) : ''}</td>
-                        <td><span class="badge badge-200">${Number(l.status) || 0}</span></td>
-                    `;
-                    tbody.appendChild(row);
-                });
-            } catch (e) {}
-        }
+          <div class="field">
+            <label class="legend" for="selFormat">Формат ответа</label>
+            <select id="selFormat">
+              <option value="txt">txt — одна строка на прокси</option>
+              <option value="json">json</option>
+              <option value="csv">csv</option>
+            </select>
+          </div>
 
-        function esc(value) {
-            return String(value ?? '').replace(/[&<>"']/g, c => ({
-                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-            })[c]);
-        }
+          <div class="field">
+            <span class="legend">Ссылка</span>
+            <code class="output" id="url">—</code>
+          </div>
 
-        function copyText(elementId) {
-            const text = document.getElementById(elementId).innerText;
-            if (navigator.clipboard && window.isSecureContext) {
-                navigator.clipboard.writeText(text);
-            } else {
-                const area = document.createElement('textarea');
-                area.value = text;
-                area.style.position = 'fixed';
-                area.style.opacity = '0';
-                document.body.appendChild(area);
-                area.select();
-                document.execCommand('copy');
-                document.body.removeChild(area);
-            }
-            const toast = document.getElementById('toast');
-            toast.style.display = 'block';
-            setTimeout(() => { toast.style.display = 'none'; }, 2200);
-        }
+          <div class="match">
+            <span>Подходит сейчас</span>
+            <b id="matchCount">—</b>
+          </div>
 
-        function switchTab(tab) {
-            if (tab === 'proxies') {
-                document.getElementById('tabProxiesView').style.display = 'block';
-                document.getElementById('tabLogsView').style.display = 'none';
-                document.getElementById('tabProxyBtn').classList.add('active');
-                document.getElementById('tabLogsBtn').classList.remove('active');
-            } else {
-                document.getElementById('tabProxiesView').style.display = 'none';
-                document.getElementById('tabLogsView').style.display = 'block';
-                document.getElementById('tabProxyBtn').classList.remove('active');
-                document.getElementById('tabLogsBtn').classList.add('active');
-                fetchLogs();
-            }
-        }
+          <div class="builder-actions">
+            <button type="button" id="copyUrl">Скопировать</button>
+            <a id="openUrl" href="#" target="_blank" rel="noopener">Открыть</a>
+          </div>
+        </div>
+      </section>
 
-        buildCustomUrl();
-        fetchStats();
-        fetchProxies();
-        setInterval(fetchStats, 5000);
-        setInterval(fetchProxies, 8000);
-    </script>
+      <section class="rack" aria-labelledby="srcTitle">
+        <div class="rack-head">
+          <h2 class="legend" id="srcTitle">источники · по доле живых</h2>
+          <span class="note">живые / собрано</span>
+        </div>
+        <div class="sources">
+          <table>
+            <thead><tr><th>Источник</th><th>Живые</th><th>Доля</th></tr></thead>
+            <tbody id="srcBody"><tr><td colspan="3" class="empty">Загрузка…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+/* ── access ─────────────────────────────────────────────────────────── */
+
+const params = new URLSearchParams(location.search);
+const queryKey = params.get('api_key') || params.get('key');
+if (queryKey) {
+  localStorage.setItem('unlim_api_key', queryKey);
+  history.replaceState(null, '', location.pathname);
+}
+const apiKey = queryKey || localStorage.getItem('unlim_api_key') || '';
+
+// A service started without API_KEY leaves /v1 open, and the panel must not bounce the
+// operator back to a key prompt they can never satisfy. Only a real 401 sends them out.
+const headers = apiKey ? { 'X-API-Key': apiKey } : {};
+
+document.getElementById('hKey').textContent = apiKey ? apiKey.slice(0, 6) + '…' : 'не задан';
+document.getElementById('signOut').addEventListener('click', () => {
+  localStorage.removeItem('unlim_api_key');
+  location.replace('/');
+});
+
+/* ── helpers ────────────────────────────────────────────────────────── */
+
+const $ = id => document.getElementById(id);
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const int = n => (Number(n) || 0).toLocaleString('ru-RU');
+
+function duration(sec) {
+  sec = Math.max(0, Math.round(Number(sec) || 0));
+  const d = Math.floor(sec / 86400), h = Math.floor(sec % 86400 / 3600), m = Math.floor(sec % 3600 / 60);
+  if (d) return d + 'д ' + h + 'ч';
+  if (h) return h + 'ч ' + m + 'м';
+  if (m) return m + 'м';
+  return sec + 'с';
+}
+
+function since(iso) {
+  if (!iso) return '—';
+  const delta = (Date.now() - Date.parse(iso)) / 1000;
+  return Number.isFinite(delta) ? duration(delta) + ' назад' : '—';
+}
+
+let toastTimer;
+function toast(text) {
+  const el = $('toast');
+  el.textContent = text;
+  el.dataset.show = '1';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.dataset.show = '0'; }, 2000);
+}
+
+function copy(text, said) {
+  const done = () => toast(said);
+  if (navigator.clipboard && isSecureContext) {
+    navigator.clipboard.writeText(text).then(done, () => fallback(text, done));
+  } else {
+    fallback(text, done);
+  }
+}
+
+function fallback(text, done) {
+  const area = document.createElement('textarea');
+  area.value = text;
+  area.style.cssText = 'position:fixed;opacity:0';
+  document.body.append(area);
+  area.select();
+  try { document.execCommand('copy'); done(); } catch { toast('Скопировать не удалось'); }
+  area.remove();
+}
+
+/* Link state is one flag: any failed poll darkens the lamp and shows the band,
+   and the last good values stay on screen rather than blanking. */
+function setLink(ok) {
+  document.body.dataset.link = ok ? 'ok' : 'fail';
+  $('hLink').textContent = ok ? 'связь есть' : 'нет связи';
+}
+
+async function api(path) {
+  const res = await fetch(path, { headers });
+  if (res.status === 401) { localStorage.removeItem('unlim_api_key'); location.replace('/'); throw 0; }
+  if (!res.ok) throw new Error(res.status);
+  return res;
+}
+
+/* ── the mimic line ─────────────────────────────────────────────────── */
+
+function stage(id, value, on) {
+  $(id).textContent = int(value);
+  $(id).closest('.stage').dataset.state = on ? 'on' : 'off';
+}
+
+function bus(rateId, text, flowing) {
+  $(rateId).textContent = text;
+  $(rateId).closest('.bus-cell').dataset.flow = flowing ? 'on' : 'off';
+}
+
+function renderMimic(d) {
+  const pool = d.pool, checks = d.checks;
+  const perSec = checks.l1_per_min / 60;
+
+  stage('sSources', d.sources.length, d.sources.length > 0);
+  $('sSourcesSub').textContent = 'списков в опросе';
+
+  stage('sBacklog', pool.unchecked, pool.unchecked > 0);
+  $('lBacklog').style.width = pool.total ? (100 * pool.unchecked / pool.total).toFixed(1) + '%' : '0';
+  $('sBacklogSub').textContent = 'из ' + int(pool.total) + ' адресов';
+
+  stage('sAlive', pool.alive, pool.alive > 0);
+  const yieldPct = checks.l1_per_min ? (100 * checks.l1_alive_per_min / checks.l1_per_min) : 0;
+  $('sAliveSub').textContent = checks.l1_per_min
+    ? 'выход ' + yieldPct.toFixed(2) + '%'
+    : 'в пуле сейчас';
+
+  stage('sGoogle', pool.google_clean, pool.google_clean > 0);
+  stage('sYoutube', pool.youtube_clean, pool.youtube_clean > 0);
+
+  bus('bScrape', d.last_scrape_at ? since(d.last_scrape_at) : '—', false);
+  bus('bL1', perSec >= 1 ? Math.round(perSec) + '/с' : checks.l1_per_min + '/мин', checks.l1_per_min > 0);
+  bus('bL2', checks.l2_per_min + '/мин', checks.l2_per_min > 0);
+  bus('bYt', checks.yt_per_min ? checks.yt_per_min + '/мин' : '—', checks.yt_per_min > 0);
+}
+
+/* ── traces: real samples only, collected while the panel is open ───── */
+
+const history = { checks: [], alive: [] };
+const WINDOW = 72;  // 72 samples at 5 s = the last six minutes
+
+function drawTrace(canvasId, emptyId, scaleId, samples, colour, unit) {
+  const canvas = $(canvasId), empty = $(emptyId);
+  const axis = canvas.nextElementSibling;
+  if (samples.length < 2) {
+    canvas.style.display = 'none';
+    axis.style.display = 'none';
+    empty.style.display = 'grid';
+    $(scaleId).textContent = '—';
+    return;
+  }
+  canvas.style.display = 'block';
+  axis.style.display = 'flex';
+  empty.style.display = 'none';
+
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  const w = canvas.clientWidth, h = 64;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+
+  // A recorder runs at a fixed rate whether or not it has paper behind it: the window
+  // is always WINDOW samples wide and the trace fills in from the right, so an early
+  // reading is never stretched across the instrument as if it were an hour of history.
+  const top = Math.max(...samples, 1) * 1.15;
+  $(scaleId).textContent = int(samples[samples.length - 1]) + ' ' + unit +
+    ' · пик ' + int(Math.max(...samples));
+
+  ctx.strokeStyle = 'rgba(255,255,255,.045)';
+  ctx.lineWidth = 1;
+  for (let i = 1; i < 4; i++) {
+    const y = Math.round(h * i / 4) + .5;
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+  }
+
+  const step = w / (WINDOW - 1);
+  const x = i => w - (samples.length - 1 - i) * step;
+  const y = v => h - 2 - (h - 10) * (v / top);
+  const first = x(0);
+
+  ctx.beginPath();
+  ctx.moveTo(first, h);
+  samples.forEach((v, i) => ctx.lineTo(x(i), y(v)));
+  ctx.lineTo(x(samples.length - 1), h);
+  ctx.closePath();
+  ctx.fillStyle = colour.replace('rgb(', 'rgba(').replace(')', ', .1)');
+  ctx.fill();
+
+  ctx.beginPath();
+  samples.forEach((v, i) => i ? ctx.lineTo(x(i), y(v)) : ctx.moveTo(x(i), y(v)));
+  ctx.strokeStyle = colour;
+  ctx.lineWidth = 1.5;
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+
+  // The pen: where the recorder is writing right now.
+  ctx.beginPath();
+  ctx.arc(x(samples.length - 1), y(samples[samples.length - 1]), 2, 0, Math.PI * 2);
+  ctx.fillStyle = colour;
+  ctx.fill();
+}
+
+function pushSample(store, value) {
+  store.push(Number(value) || 0);
+  if (store.length > WINDOW) store.shift();
+}
+
+/* ── pool composition ───────────────────────────────────────────────── */
+
+function renderMix(d) {
+  const rows = [];
+  const protoTotal = Object.values(d.by_protocol).reduce((a, b) => a + b, 0);
+  for (const [k, n] of Object.entries(d.by_protocol)) rows.push([k, n, protoTotal]);
+
+  const countries = Object.entries(d.by_country).slice(0, 5);
+  const countryTotal = Object.values(d.by_country).reduce((a, b) => a + b, 0);
+  for (const [k, n] of countries) rows.push([k, n, countryTotal]);
+
+  $('mixScale').textContent = protoTotal ? int(protoTotal) + ' живых' : 'пул пуст';
+  $('mix').innerHTML = rows.length
+    ? rows.map(([k, n, total]) => `
+        <div class="row">
+          <span class="k">${esc(k)}</span>
+          <span class="track"><i style="width:${total ? (100 * n / total).toFixed(1) : 0}%"></i></span>
+          <span class="v">${int(n)}</span>
+        </div>`).join('')
+    : '<p class="empty" style="padding:12px 0">Пул ещё наполняется</p>';
+}
+
+/* ── sources ────────────────────────────────────────────────────────── */
+
+function renderSources(list) {
+  const rows = list.filter(s => s.fetched > 0).slice(0, 24);
+  $('srcBody').innerHTML = rows.length
+    ? rows.map(s => `
+        <tr>
+          <td class="dim">${esc(s.name)}</td>
+          <td class="addr">${int(s.alive)}</td>
+          <td class="addr dim">${(100 * s.score).toFixed(2)}%</td>
+        </tr>`).join('')
+    : '<tr><td colspan="3" class="empty">Ни один источник ещё не проверен</td></tr>';
+}
+
+/* ── pool table ─────────────────────────────────────────────────────── */
+
+let proxies = [];
+let sortKey = 'latency_ms';
+let sortAsc = true;
+
+function targetTag(p) {
+  if (p.dual_clean) return '<span class="tag" data-on="live">поиск + канал</span>';
+  if (p.parser_clean) return '<span class="tag" data-on="signal">поиск</span>';
+  if (p.aiohttp_clean) return '<span class="tag" data-on="signal">канал</span>';
+  return '<span class="tag" data-on="off">не проверен</span>';
+}
+
+function renderPool() {
+  const body = $('poolBody');
+  $('poolCount').textContent = proxies.length ? 'показано ' + proxies.length : '';
+
+  if (!proxies.length) {
+    body.innerHTML = '<tr><td colspan="8" class="empty">Пул пуст. Проверки идут — живые появятся здесь в течение нескольких минут.</td></tr>';
+    return;
+  }
+
+  const sorted = [...proxies].sort((a, b) => {
+    const av = a[sortKey], bv = b[sortKey];
+    const cmp = typeof av === 'string' ? av.localeCompare(String(bv)) : (Number(av) || 0) - (Number(bv) || 0);
+    return sortAsc ? cmp : -cmp;
+  });
+
+  body.innerHTML = sorted.map(p => `
+    <tr>
+      <td><span class="tag">${esc(p.protocol)}</span></td>
+      <td class="addr" data-copy="${esc(p.proxy)}" title="Нажмите, чтобы скопировать">${esc(p.proxy)}</td>
+      <td>${targetTag(p)}</td>
+      <td class="dim geo" title="${esc(p.country || '')} ${esc(p.city || '')}">${esc(p.country || '—')}${p.city ? ' · ' + esc(p.city) : ''}</td>
+      <td class="dim">${esc(p.anonymity || '—')}</td>
+      <td class="addr">${Number(p.latency_ms) || 0} мс</td>
+      <td>
+        <span class="score">
+          <span class="bar"><i style="width:${Math.min(100, Number(p.score) || 0)}%"></i></span>
+          <span class="addr dim">${(Number(p.score) || 0).toFixed(1)}</span>
+        </span>
+      </td>
+      <td class="addr age" data-fresh="${(Number(p.age_sec) || 0) > 180 ? 'stale' : 'fresh'}">${Number(p.age_sec) || 0} с</td>
+    </tr>`).join('');
+}
+
+$('poolBody').addEventListener('click', event => {
+  const cell = event.target.closest('[data-copy]');
+  if (cell) copy(cell.dataset.copy, 'Адрес скопирован');
+});
+
+document.querySelectorAll('th[data-sort]').forEach(th => {
+  th.addEventListener('click', () => {
+    const key = th.dataset.sort;
+    sortAsc = key === sortKey ? !sortAsc : true;
+    sortKey = key;
+    document.querySelectorAll('th[data-sort]').forEach(o => o.removeAttribute('aria-sort'));
+    th.setAttribute('aria-sort', sortAsc ? 'ascending' : 'descending');
+    renderPool();
+  });
+});
+
+/* ── tabs ───────────────────────────────────────────────────────────── */
+
+function selectTab(name) {
+  const pool = name === 'pool';
+  $('tabPool').setAttribute('aria-selected', String(pool));
+  $('tabLogs').setAttribute('aria-selected', String(!pool));
+  $('viewPool').hidden = !pool;
+  $('viewLogs').hidden = pool;
+  $('poolCount').hidden = !pool;
+  if (!pool) loadLogs();
+}
+
+$('tabPool').addEventListener('click', () => selectTab('pool'));
+$('tabLogs').addEventListener('click', () => selectTab('logs'));
+
+/* ── builder ────────────────────────────────────────────────────────── */
+
+const controls = ['selTarget', 'selType', 'selProto', 'selFormat'].map($);
+
+function buildUrl() {
+  const target = $('selTarget').value;
+  const type = $('selType').value;
+  const proto = $('selProto').value;
+  const format = $('selFormat').value;
+
+  const path = type === 'single' ? '/v1/proxy' : '/v1/proxies';
+  const query = new URLSearchParams();
+
+  // `google` is the google_clean flag, not a ?target= value; sending it as one is a 422.
+  if (target === 'google') query.set('google_clean', 'true');
+  else if (target) query.set('target', target);
+  if (proto !== 'all') query.set('protocol', proto);
+  if (type !== 'single') {
+    query.set('format', format);
+    query.set('limit', type === 'unlimited' ? '100000' : type);
+  }
+  if (apiKey) query.set('api_key', apiKey);
+  return location.origin + path + '?' + query;
+}
+
+let countTimer;
+function refreshBuilder() {
+  const url = buildUrl();
+  $('url').textContent = url;
+  $('openUrl').href = url;
+  $('selFormat').closest('.field').hidden = $('selType').value === 'single';
+
+  clearTimeout(countTimer);
+  $('matchCount').textContent = '…';
+  countTimer = setTimeout(async () => {
+    // Ask the API itself rather than guessing from the visible page, so the number
+    // reflects every filter exactly as the caller's own request would.
+    const query = new URLSearchParams();
+    const target = $('selTarget').value;
+    if (target === 'google') query.set('google_clean', 'true');
+    else if (target) query.set('target', target);
+    if ($('selProto').value !== 'all') query.set('protocol', $('selProto').value);
+    query.set('format', 'txt');
+    query.set('limit', '100000');
+    try {
+      const text = await (await api('/v1/proxies?' + query)).text();
+      const n = text.trim() ? text.trim().split('\n').length : 0;
+      $('matchCount').textContent = int(n);
+    } catch { $('matchCount').textContent = '—'; }
+  }, 350);
+}
+
+controls.forEach(el => el.addEventListener('change', refreshBuilder));
+$('copyUrl').addEventListener('click', () => copy(buildUrl(), 'Ссылка скопирована'));
+
+/* ── polling ────────────────────────────────────────────────────────── */
+
+async function loadStats() {
+  const d = await (await api('/v1/stats')).json();
+  renderMimic(d);
+  renderMix(d);
+  renderSources(d.sources);
+
+  $('hUptime').textContent = duration(d.uptime_sec);
+  $('hScrape').textContent = since(d.last_scrape_at);
+
+  pushSample(history.checks, d.checks.l1_per_min);
+  pushSample(history.alive, d.pool.alive);
+  drawTrace('traceChecks', 'traceEmpty', 'traceScale', history.checks, 'rgb(116,182,214)', 'в мин');
+  drawTrace('traceAlive', 'aliveEmpty', 'aliveScale', history.alive, 'rgb(87,201,138)', 'шт');
+}
+
+async function loadProxies() {
+  const d = await (await api('/v1/proxies?limit=200')).json();
+  proxies = d.proxies || [];
+  renderPool();
+}
+
+async function loadLogs() {
+  try {
+    const d = await (await api('/v1/logs')).json();
+    const logs = d.logs || [];
+    $('logsBody').innerHTML = logs.length
+      ? logs.map(l => `
+          <tr>
+            <td class="addr dim">${esc(l.time)}</td>
+            <td class="addr">${esc(l.client_ip)}</td>
+            <td class="dim">${esc(l.method)}</td>
+            <td class="addr dim">${esc(l.path)}${l.query ? '?' + esc(l.query) : ''}</td>
+            <td class="addr" style="color:${Number(l.status) < 400 ? 'var(--live)' : 'var(--fault)'}">${Number(l.status) || 0}</td>
+          </tr>`).join('')
+      : '<tr><td colspan="5" class="empty">Обращений к API ещё не было</td></tr>';
+  } catch { /* the band already reports it */ }
+}
+
+async function tick() {
+  try {
+    await Promise.all([loadStats(), loadProxies()]);
+    if ($('tabLogs').getAttribute('aria-selected') === 'true') await loadLogs();
+    setLink(true);
+  } catch (err) {
+    if (err !== 0) setLink(false);
+  }
+}
+
+refreshBuilder();
+tick();
+setInterval(tick, 5000);
+
+let resizeTimer;
+addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    drawTrace('traceChecks', 'traceEmpty', 'traceScale', history.checks, 'rgb(116,182,214)', 'в мин');
+    drawTrace('traceAlive', 'aliveEmpty', 'aliveScale', history.alive, 'rgb(87,201,138)', 'шт');
+  }, 150);
+});
+</script>
 </body>
 </html>

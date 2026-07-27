@@ -529,14 +529,26 @@ class Storage:
         row = (
             await self._rows(
                 """SELECT COUNT(*) AS total,
+                          SUM(last_check_at IS NULL) AS unchecked,
                           SUM(alive) AS alive,
                           SUM(alive AND google_clean) AS google_clean,
+                          SUM(alive AND dual_clean) AS youtube_clean,
                           SUM(fail_streak >= ? AND checks_ok > 0) AS quarantine
                    FROM proxies""",
                 (fail_streak_quarantine,),
             )
         )[0]
-        return {k: int(row[k] or 0) for k in ("total", "alive", "google_clean", "quarantine")}
+        return {
+            k: int(row[k] or 0)
+            for k in (
+                "total",
+                "unchecked",
+                "alive",
+                "google_clean",
+                "youtube_clean",
+                "quarantine",
+            )
+        }
 
     async def group_counts(self, column: str) -> dict[str, int]:
         if column not in {"protocol", "country", "anonymity", "asn_type"}:
@@ -554,9 +566,15 @@ class Storage:
             "SELECT kind, SUM(ok) AS n FROM checks WHERE at >= ? GROUP BY kind", (cutoff,)
         )
         counts = {r["kind"]: int(r["n"] or 0) for r in rows}
+        # `record_checks` writes two rows per sweep: `<kind>` carries the successes and
+        # `<kind>_total` the attempts, so a yield can be read off the pair.
         return {
             "l1_per_min": counts.get("l1_total", 0) // 5,
+            "l1_alive_per_min": counts.get("l1", 0) // 5,
             "l2_per_min": counts.get("l2_total", 0) // 5,
+            "l2_clean_per_min": counts.get("l2", 0) // 5,
+            "yt_per_min": counts.get("yt_total", 0) // 5,
+            "yt_clean_per_min": counts.get("yt", 0) // 5,
         }
 
     async def count(self, sql: str, params: Iterable[Any] = ()) -> int:

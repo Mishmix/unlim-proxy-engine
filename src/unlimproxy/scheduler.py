@@ -209,6 +209,7 @@ class Scheduler:
                 proxy.dual_clean = int(search_ok and channel_ok)
                 both += proxy.dual_clean
                 await self.storage.record_yt(proxy.id, search_ok, channel_ok)
+            await self.storage.record_checks("yt", both, len(batch))
             await self.storage.commit()
         log.info("youtube sweep", extra={"checked": len(batch), "dual_clean": both})
 

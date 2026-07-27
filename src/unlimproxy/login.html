@@ -1,181 +1,310 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Unlim Proxy Engine | Authentication Required</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg-primary: #0b0f19;
-            --bg-card: rgba(17, 24, 39, 0.9);
-            --border-card: rgba(255, 255, 255, 0.08);
-            --accent-primary: #6366f1;
-            --accent-glow: rgba(99, 102, 241, 0.35);
-            --danger-color: #ef4444;
-            --text-main: #f3f4f6;
-            --text-muted: #9ca3af;
-        }
+<meta charset="UTF-8">
+<!--
+THESIS: the access plate of an instrument, not a login card floating on a gradient. The
+  key slot is machined into the chassis and one lamp reports the state of the attempt.
+OWN-WORLD: high-performance HMI. Achromatic graphite chassis, 1px engraved grooves,
+  inset highlights where a panel edge catches light, colour reserved for state — green
+  live, amber checking, red refused. Mono for anything measured, 10px tracked uppercase
+  for engraved legend.
+STORY: the machine is already running; you are being let into its panel.
+FIRST VIEWPORT: chassis fills the screen. Nameplate over a rated legend, the key slot at
+  full plate width with the lamp inset in its right shoulder, engage bar beneath, and a
+  live service readout underneath that works before any key is typed.
+FORM: single-line mimic panel, candidate 3 of the grounded list, seed key 7285d859.
+-->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Unlim Proxy — доступ к щиту</title>
+<style>
+  :root {
+    --ground: #16181b;
+    --panel: #1c1f22;
+    --panel-lift: #23272b;
+    --groove: #2c3136;
+    --groove-lit: #3b4249;
+    --ink: #e2e6e9;
+    --ink-2: #9aa1a7;
+    --ink-3: #868e94;
+    --live: #57c98a;
+    --warn: #d7a441;
+    --fault: #d9564c;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Ubuntu, Cantarell, sans-serif;
+    --edge: inset 0 1px 0 rgba(255, 255, 255, .035);
+  }
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-        }
+  * { box-sizing: border-box; }
 
-        body {
-            background-color: var(--bg-primary);
-            background-image: 
-                radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
-                radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.1) 0px, transparent 50%);
-            color: var(--text-main);
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-        }
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background:
+      repeating-linear-gradient(180deg, transparent 0 3px, rgba(255, 255, 255, .008) 3px 4px),
+      var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 13px;
+    line-height: 1.5;
+    display: grid;
+    grid-template-rows: 1fr auto;
+    -webkit-font-smoothing: antialiased;
+  }
 
-        .auth-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border-card);
-            border-radius: 20px;
-            padding: 40px 36px;
-            width: 100%;
-            max-width: 420px;
-            text-align: center;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.5), 0 0 30px var(--accent-glow);
-            backdrop-filter: blur(16px);
-        }
+  .legend {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .09em;
+    color: var(--ink-2);
+  }
 
-        .auth-icon {
-            width: 64px;
-            height: 64px;
-            background: linear-gradient(135deg, #6366f1, #10b981);
-            border-radius: 16px;
-            margin: 0 auto 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 28px;
-            color: white;
-            box-shadow: 0 0 20px var(--accent-glow);
-        }
+  main { display: grid; place-items: center; padding: 32px 20px; }
+  .plate { width: 100%; max-width: 430px; }
 
-        .auth-title {
-            font-size: 22px;
-            font-weight: 700;
-            margin-bottom: 8px;
-            background: linear-gradient(90deg, #fff, #9ca3af);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
+  .nameplate {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--groove);
+  }
 
-        .auth-desc {
-            font-size: 13px;
-            color: var(--text-muted);
-            margin-bottom: 24px;
-            line-height: 1.5;
-        }
+  .nameplate h1 {
+    margin: 0;
+    font-family: var(--mono);
+    font-size: 20px;
+    font-weight: 500;
+    letter-spacing: -.01em;
+  }
 
-        .auth-input {
-            width: 100%;
-            background: rgba(0, 0, 0, 0.4);
-            border: 1px solid var(--border-card);
-            border-radius: 10px;
-            padding: 14px 16px;
-            color: white;
-            font-size: 15px;
-            margin-bottom: 16px;
-            outline: none;
-            transition: border-color 0.2s;
-        }
+  .nameplate .rev { font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
+  .rated { padding: 8px 0 24px; }
 
-        .auth-input:focus {
-            border-color: var(--accent-primary);
-        }
+  form { display: grid; gap: 8px; }
 
-        .auth-btn {
-            width: 100%;
-            background: var(--accent-primary);
-            color: white;
-            border: none;
-            padding: 14px;
-            border-radius: 10px;
-            font-size: 15px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: opacity 0.2s;
-        }
+  .slot {
+    display: flex;
+    align-items: stretch;
+    background: var(--panel);
+    border: 1px solid var(--groove);
+    box-shadow: var(--edge);
+  }
 
-        .auth-btn:hover {
-            opacity: 0.9;
-        }
+  .slot:focus-within { border-color: var(--groove-lit); }
 
-        .auth-error {
-            color: var(--danger-color);
-            font-size: 13px;
-            margin-top: 14px;
-            display: none;
-            background: rgba(239, 68, 68, 0.1);
-            padding: 8px 12px;
-            border-radius: 8px;
-            border: 1px solid rgba(239, 68, 68, 0.2);
-        }
-    </style>
+  .slot input {
+    flex: 1;
+    min-width: 0;
+    padding: 14px 12px;
+    background: none;
+    border: 0;
+    color: var(--ink);
+    font-family: var(--mono);
+    font-size: 13px;
+    letter-spacing: .02em;
+  }
+
+  .slot input::placeholder { color: var(--ink-3); }
+  .slot input:focus { outline: none; }
+
+  .lamp-housing {
+    display: grid;
+    place-items: center;
+    width: 42px;
+    border-left: 1px solid var(--groove);
+    background: rgba(0, 0, 0, .18);
+  }
+
+  .lamp {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #2f3438;
+    box-shadow: inset 0 1px 1px rgba(0, 0, 0, .6);
+    transition: background .18s linear;
+  }
+
+  [data-state="checking"] .lamp { background: var(--warn); }
+  [data-state="granted"] .lamp { background: var(--live); }
+  [data-state="refused"] .lamp { background: var(--fault); }
+
+  button {
+    padding: 13px;
+    background: var(--panel-lift);
+    border: 1px solid var(--groove-lit);
+    box-shadow: var(--edge);
+    color: var(--ink);
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background .12s linear;
+  }
+
+  button:hover:not(:disabled) { background: #2a2f34; }
+  button:active:not(:disabled) { background: var(--panel); box-shadow: none; }
+  button:focus-visible { outline: 2px solid var(--groove-lit); outline-offset: 2px; }
+  button:disabled { color: var(--ink-3); cursor: progress; }
+
+  .readout {
+    min-height: 40px;
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--groove);
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: baseline;
+    flex-wrap: wrap;
+  }
+
+  .readout output { font-family: var(--mono); font-size: 12px; color: var(--ink-3); }
+  [data-state="refused"] .readout output { color: var(--fault); }
+  [data-state="granted"] .readout output { color: var(--live); }
+
+  .service { font-family: var(--mono); font-size: 11px; color: var(--ink-3); white-space: nowrap; }
+  .service b { color: var(--ink-2); font-weight: 400; }
+
+  footer {
+    padding: 14px 20px;
+    border-top: 1px solid var(--groove);
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  footer a { color: var(--ink-2); text-decoration: none; border-bottom: 1px solid var(--groove-lit); }
+  footer a:hover { color: var(--ink); }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
 </head>
 <body>
 
-    <div class="auth-card">
-        <div class="auth-icon">🔒</div>
-        <div class="auth-title">UNLIM PROXY ENGINE</div>
-        <div class="auth-desc">Доступ к панели управления защищен. Введите ваш API-ключ для входа:</div>
-        <input type="password" id="keyInput" class="auth-input" placeholder="Введите API Key..." onkeydown="if(event.key==='Enter') login()">
-        <button class="auth-btn" onclick="login()">Войти в систему</button>
-        <div id="authError" class="auth-error">Неверный API-ключ! Доступ запрещен.</div>
+<main>
+  <div class="plate" id="plate" data-state="idle">
+    <div class="nameplate">
+      <h1>UNLIM&nbsp;PROXY</h1>
+      <span class="rev">щит управления</span>
     </div>
+    <p class="rated legend">пул свободных прокси · проверка через google и youtube</p>
 
-    <script>
-        const host = window.location.origin;
+    <form id="form" autocomplete="off">
+      <label class="legend" for="key">ключ доступа</label>
+      <div class="slot">
+        <input id="key" name="key" type="password" placeholder="X-API-Key"
+               spellcheck="false" autocomplete="off" required>
+        <span class="lamp-housing" title="индикатор доступа"><i class="lamp"></i></span>
+      </div>
+      <button type="submit" id="engage">Подключиться</button>
+    </form>
 
-        async function login() {
-            const key = document.getElementById('keyInput').value.trim();
-            if (!key) return;
-            try {
-                const res = await fetch(host + '/v1/auth/verify', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ key: key })
-                });
-                if (res.ok) {
-                    localStorage.setItem('unlim_api_key', key);
-                    window.location.href = host + '/dashboard?api_key=' + encodeURIComponent(key);
-                } else {
-                    document.getElementById('authError').style.display = 'block';
-                }
-            } catch (e) {
-                document.getElementById('authError').innerText = 'Ошибка соединения с сервером!';
-                document.getElementById('authError').style.display = 'block';
-            }
-        }
+    <div class="readout">
+      <output id="msg" for="key" aria-live="polite">Ключ хранится только в этом браузере</output>
+      <span class="service" id="service">опрос службы…</span>
+    </div>
+  </div>
+</main>
 
-        // Auto redirect if key is stored and valid
-        (async function autoCheck() {
-            const stored = localStorage.getItem('unlim_api_key');
-            if (stored) {
-                try {
-                    const res = await fetch(host + '/v1/auth/verify', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ key: stored })
-                    });
-                    if (res.ok) {
-                        window.location.href = host + '/dashboard?api_key=' + encodeURIComponent(stored);
-                    }
-                } catch (e) {}
-            }
-        })();
-    </script>
+<footer class="legend">
+  <span>Документация API — <a href="/docs">/docs</a></span>
+  <span>unlim-proxy</span>
+</footer>
+
+<script>
+  const plate = document.getElementById('plate');
+  const form = document.getElementById('form');
+  const input = document.getElementById('key');
+  const engage = document.getElementById('engage');
+  const msg = document.getElementById('msg');
+  const IDLE = 'Ключ хранится только в этом браузере';
+
+  function setState(state, text) {
+    plate.dataset.state = state;
+    if (text) msg.textContent = text;
+  }
+
+  // The panel is useless without a reachable service, so report whether one is there
+  // before a key is even typed. /healthz needs no key by design.
+  fetch('/healthz')
+    .then(r => r.json())
+    .then(d => {
+      const el = document.getElementById('service');
+      el.innerHTML = d.pool_alive > 0
+        ? 'служба в работе · в пуле <b>' + d.pool_alive + '</b>'
+        : 'служба отвечает · пул ещё наполняется';
+    })
+    .catch(() => { document.getElementById('service').textContent = 'служба не отвечает'; });
+
+  async function verify(key) {
+    const res = await fetch('/v1/auth/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key })
+    });
+    return res.ok;
+  }
+
+  function enter(key) {
+    localStorage.setItem('unlim_api_key', key);
+    location.href = '/dashboard?api_key=' + encodeURIComponent(key);
+  }
+
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    const key = input.value.trim();
+    if (!key) return;
+
+    setState('checking', 'Проверка ключа…');
+    engage.disabled = true;
+    try {
+      if (await verify(key)) {
+        setState('granted', 'Доступ разрешён');
+        enter(key);
+        return;
+      }
+      setState('refused', 'Ключ не принят. Сверьте API_KEY в .env на сервере.');
+    } catch {
+      setState('refused', 'Нет связи со службой. Она запущена?');
+    }
+    engage.disabled = false;
+    input.select();
+  });
+
+  input.addEventListener('input', () => {
+    if (plate.dataset.state === 'refused') setState('idle', IDLE);
+  });
+
+  (async function resume() {
+    // A service started without API_KEY leaves /v1 open by design. Demanding a key
+    // the operator never set would lock them out of their own panel, so probe first.
+    try {
+      if ((await fetch('/v1/stats')).ok) {
+        setState('granted', 'Ключ на этой службе не настроен — вход свободный');
+        input.disabled = true;
+        input.placeholder = 'не требуется';
+        engage.textContent = 'Открыть щит';
+        form.addEventListener('submit', event => {
+          event.preventDefault();
+          location.href = '/dashboard';
+        }, { capture: true });
+        return;
+      }
+    } catch { /* offline: the service readout already says so */ }
+
+    const stored = localStorage.getItem('unlim_api_key');
+    if (!stored) return;
+    try {
+      if (await verify(stored)) enter(stored);
+    } catch { /* offline: leave the operator on the plate */ }
+  })();
+</script>
 </body>
 </html>

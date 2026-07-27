@@ -21,7 +21,24 @@ Give it about 15 minutes to fill the pool, then:
 curl -s "localhost:8000/v1/proxy?google_clean=true" | jq
 ```
 
-Interactive API docs are at <http://localhost:8000/docs>.
+Interactive API docs are at <http://localhost:8000/docs>, and the control panel is at
+<http://localhost:8000/>.
+
+## The control panel
+
+The pool is a process, so the panel draws the process rather than stacking four totals
+in cards. One mimic line runs sources → backlog → liveness → alive → Google → YouTube →
+API, each reading sitting on the topology where it is measured and each link showing its
+own rate and animating only while that rate is above zero. Under it sit two strip-chart
+recorders, the pool composition, the pool and request-log tables, and a URL builder that
+reports how many proxies currently match before you copy the link.
+
+It follows high-performance HMI practice: the chassis is grey and colour means state and
+nothing else, so a panel left open on a second monitor is silent until something is worth
+looking at. No webfonts and no CDN — the container may have no outbound access.
+
+If `API_KEY` is set, the panel asks for it once and keeps it in `localStorage`. If it is
+unset, `/v1` is open and the panel opens with it.
 
 ---
 
@@ -453,9 +470,8 @@ src/unlimproxy/
 
 ## Not included
 
-No web UI or dashboard — `/v1/stats` and FastAPI's `/docs` cover it. No built-in forward
-proxy: the service hands out proxy addresses, it does not tunnel your traffic through
-them. No paid provider support, no proxy authentication, no IPv6.
+No built-in forward proxy: the service hands out proxy addresses, it does not tunnel
+your traffic through them. No paid provider support, no proxy authentication, no IPv6.
 
 ## License
 
