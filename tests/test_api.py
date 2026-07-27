@@ -299,3 +299,31 @@ def test_api_key_is_enforced_when_configured(pool, tmp_path):
     assert guarded.get("/v1/proxies", headers={"X-API-Key": "wrong"}).status_code == 401
     assert guarded.get("/v1/proxies", headers={"X-API-Key": "s3cret"}).status_code == 200
     assert guarded.get("/healthz").status_code == 200  # always open
+
+
+# ─── the panel shell vs the guarded data ───────────────────────────────────
+
+
+def test_dashboard_shell_is_reachable_without_a_key(pool, tmp_path):
+    """Regression: the shell was guarded, so it could be opened exactly once — through
+    the redirect that carries the key in the query string. The panel then strips that
+    key out of the address bar, so reloading the page sent no key at all and the
+    operator got a raw 401 body instead of their panel. Bookmarking never worked.
+
+    The shell holds no data; every number in it arrives later from `/v1/*`.
+    """
+    settings = Settings(sources=[], api_key="s3cret")
+    settings.app.db_path = tmp_path / "t.db"
+    scheduler = Scheduler(settings, Storage(settings.app.db_path))
+    scheduler.pool = pool
+    client = TestClient(create_app(settings, scheduler))
+
+    for path in ("/", "/dashboard"):
+        response = client.get(path)
+        assert response.status_code == 200, path
+        assert "s3cret" not in response.text, path
+
+    # The data behind it stays shut.
+    assert client.get("/v1/proxies").status_code == 401
+    assert client.get("/v1/stats").status_code == 401
+    assert client.get("/v1/logs").status_code == 401

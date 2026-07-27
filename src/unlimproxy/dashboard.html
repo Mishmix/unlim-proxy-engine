@@ -150,7 +150,7 @@ FORM: single-line mimic panel, candidate 3 of the grounded list, seed key 7285d8
     overflow-x: auto;
   }
 
-  .stage { display: flex; flex-direction: column; gap: 6px; min-width: 108px; flex: 0 0 auto; }
+  .stage { display: flex; flex-direction: column; gap: 6px; min-width: 116px; flex: 0 0 auto; }
   .stage-legend { font-size: 10px; text-transform: uppercase; letter-spacing: .09em; color: var(--ink-2); }
 
   .stage-value {
@@ -439,7 +439,7 @@ FORM: single-line mimic panel, candidate 3 of the grounded list, seed key 7285d8
     .strip > section:last-child { border-bottom: 0; }
   }
 
-  @media (max-width: 720px) {
+  @media (max-width: 1000px) {
     main { padding: 12px; gap: 12px; }
     header { padding: 10px 12px; gap: 10px 14px; }
     .nameplate span { display: none; }
@@ -744,6 +744,12 @@ const apiKey = queryKey || localStorage.getItem('unlim_api_key') || '';
 // A service started without API_KEY leaves /v1 open, and the panel must not bounce the
 // operator back to a key prompt they can never satisfy. Only a real 401 sends them out.
 const headers = apiKey ? { 'X-API-Key': apiKey } : {};
+
+// With no key stored, find out whether this service wants one before drawing a panel
+// that is about to 401 on every poll.
+if (!apiKey) {
+  fetch('/v1/stats').then(r => { if (r.status === 401) location.replace('/'); });
+}
 
 document.getElementById('hKey').textContent = apiKey ? apiKey.slice(0, 6) + '…' : 'не задан';
 document.getElementById('signOut').addEventListener('click', () => {

@@ -241,7 +241,17 @@ def create_app(settings: Settings, scheduler: Scheduler) -> FastAPI:
         return HTMLResponse(content="<h1>Unlim Proxy Login</h1>")
 
     @app.get("/dashboard", response_class=HTMLResponse, include_in_schema=False)
-    async def dashboard_page(auth_key: str = Depends(require_key)):
+    async def dashboard_page():
+        """Served without the key on purpose.
+
+        The file is an empty shell — every number in it arrives later from `/v1/*`,
+        which is guarded. Guarding the shell as well only looked safer: the page can
+        be reached exactly once, through the redirect that carries the key in the
+        query string, and the panel then strips that key out of the address bar so it
+        does not sit in history or in a screenshot. Reloading the page after that sent
+        a request with no key at all and the operator got a raw 401 body instead of
+        their panel. Bookmarking it never worked either.
+        """
         dash_path = Path(__file__).parent / "dashboard.html"
         if dash_path.exists():
             return HTMLResponse(content=dash_path.read_text(encoding="utf-8"))
