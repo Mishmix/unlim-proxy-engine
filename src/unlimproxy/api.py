@@ -11,8 +11,10 @@ import io
 import time
 from typing import Annotated, Literal
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
-from fastapi.responses import JSONResponse, PlainTextResponse
+from datetime import datetime, UTC
+from pathlib import Path
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field, StringConstraints
 
 from .config import Settings
@@ -47,6 +49,7 @@ CSV_COLUMNS = (
 
 class Filters(BaseModel):
     limit: int = 20
+    target: str | None = None
     protocol: list[str] = []
     country: list[str] = []
     exclude_country: list[str] = []
@@ -65,7 +68,8 @@ class ReportBody(BaseModel):
 
 
 def filters(
-    limit: Annotated[int, Query(ge=1, le=500)] = 20,
+    limit: Annotated[int, Query(ge=1, le=100000)] = 20,
+    target: str | None = Query(None),
     protocol: Annotated[list[Literal["http", "socks4", "socks5"]] | None, Query()] = None,
     country: Annotated[list[CountryCode] | None, Query()] = None,
     exclude_country: Annotated[list[CountryCode] | None, Query()] = None,
@@ -78,6 +82,7 @@ def filters(
 ) -> Filters:
     return Filters(
         limit=limit,
+        target=target,
         protocol=protocol or [],
         country=[c.upper() for c in country or []],
         exclude_country=[c.upper() for c in exclude_country or []],
@@ -91,6 +96,10 @@ def filters(
 
 
 def matches(proxy: Proxy, f: Filters) -> bool:
+    if f.target in ("parser", "search") and getattr(proxy, "parser_clean", 1) == 0:
+        return False
+    if f.target == "aiohttp" and getattr(proxy, "aiohttp_clean", 1) == 0:
+        return False
     if f.google_clean and not proxy.google_clean:
         return False
     if f.protocol and proxy.protocol not in f.protocol:
@@ -137,6 +146,9 @@ def serialize(proxy: Proxy) -> dict:
         "anonymity": proxy.anonymity,
         "latency_ms": proxy.latency_ms,
         "google_clean": bool(proxy.google_clean),
+        "parser_clean": bool(getattr(proxy, "parser_clean", 1)),
+        "aiohttp_clean": bool(getattr(proxy, "aiohttp_clean", 1)),
+        "dual_clean": bool(getattr(proxy, "dual_clean", 1)),
         "score": proxy.score,
         "uptime_ratio": round(proxy.uptime_ratio, 2),
         "last_verified_at": proxy.last_verified_at,
@@ -165,11 +177,64 @@ def create_app(settings: Settings, scheduler: Scheduler) -> FastAPI:
     app.state.settings = settings
     app.state.scheduler = scheduler
 
-    def require_key(x_api_key: Annotated[str | None, Header()] = None) -> None:
-        if settings.api_key and x_api_key != settings.api_key:
-            raise HTTPException(status_code=401, detail="invalid or missing X-API-Key")
+    app.state.api_logs = []
+
+    allowed_keys = set(k.strip() for k in (settings.api_key or "").split(",") if k.strip())
+
+    @app.middleware("http")
+    async def log_requests(request: Request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/v1/"):
+            client_ip = request.client.host if request.client else "unknown"
+            ts = datetime.now(UTC).strftime("%H:%M:%S")
+            app.state.api_logs.insert(0, {
+                "time": ts,
+                "client_ip": client_ip,
+                "method": request.method,
+                "path": str(request.url.path),
+                "query": str(request.url.query),
+                "status": response.status_code
+            })
+            if len(app.state.api_logs) > 100:
+                app.state.api_logs.pop()
+        return response
+
+    def require_key(
+        x_api_key: str | None = Header(None),
+        api_key: str | None = Query(None),
+        key: str | None = Query(None),
+    ) -> str:
+        provided = x_api_key or api_key or key
+        if allowed_keys and (not provided or provided not in allowed_keys):
+            raise HTTPException(status_code=401, detail="invalid or missing API Key")
+        return provided or ""
 
     guard = [Depends(require_key)]
+
+    @app.post("/v1/auth/verify", summary="Verify API key")
+    async def verify_auth(body: dict):
+        k = body.get("key", "").strip()
+        if not allowed_keys or k in allowed_keys:
+            return {"valid": True}
+        return JSONResponse({"valid": False, "detail": "Invalid API Key"}, status_code=401)
+
+    @app.get("/", response_class=HTMLResponse, include_in_schema=False)
+    async def login_page():
+        login_path = Path(__file__).parent / "login.html"
+        if login_path.exists():
+            return HTMLResponse(content=login_path.read_text(encoding="utf-8"))
+        return HTMLResponse(content="<h1>Unlim Proxy Login</h1>")
+
+    @app.get("/dashboard", response_class=HTMLResponse, include_in_schema=False)
+    async def dashboard_page(auth_key: str = Depends(require_key)):
+        dash_path = Path(__file__).parent / "dashboard.html"
+        if dash_path.exists():
+            return HTMLResponse(content=dash_path.read_text(encoding="utf-8"))
+        return HTMLResponse(content="<h1>Unlim Proxy Dashboard</h1>")
+
+    @app.get("/v1/logs", dependencies=guard, summary="Recent API request logs")
+    async def get_api_logs():
+        return {"logs": app.state.api_logs}
 
     @app.get("/v1/proxy", dependencies=guard, summary="One proxy, rotated")
     async def one_proxy(f: Annotated[Filters, Depends(filters)]):

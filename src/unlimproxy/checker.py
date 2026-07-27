@@ -147,6 +147,40 @@ class Checker:
             body, status = "", None
         return L2Result(classify_google(status, body, self.cfg), len(body))
 
+    async def check_yt_search(self, host: str, port: int, protocol: str) -> bool:
+        """Check if proxy can load YouTube search results page."""
+        url = "https://www.youtube.com/results?search_query=test&sp=EgIQAg%3D%3D"
+        try:
+            async with (
+                self._session(host, port, protocol, 5.0) as session,
+                session.get(url, allow_redirects=True) as response,
+            ):
+                if response.status == 200:
+                    body = await response.text(errors="replace")
+                    lowered = body.lower()
+                    if not any(marker in lowered for marker in CAPTCHA_MARKERS) and len(body) > 10000:
+                        return True
+        except Exception:
+            pass
+        return False
+
+    async def check_yt_channel(self, host: str, port: int, protocol: str) -> bool:
+        """Check if proxy can load direct YouTube channel HTML for aiohttp channel checker."""
+        url = "https://www.youtube.com/@YouTube/about"
+        try:
+            async with (
+                self._session(host, port, protocol, 5.0) as session,
+                session.get(url, allow_redirects=True) as response,
+            ):
+                if response.status == 200:
+                    body = await response.text(errors="replace")
+                    lowered = body.lower()
+                    if not any(marker in lowered for marker in CAPTCHA_MARKERS) and len(body) > 10000:
+                        return True
+        except Exception:
+            pass
+        return False
+
     # ─── anonymity ─────────────────────────────────────────────────────────
 
     async def check_anonymity(self, host: str, port: int, protocol: str) -> Anonymity | None:

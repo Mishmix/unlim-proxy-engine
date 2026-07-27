@@ -13,8 +13,8 @@ rotation_cooldown_sec = 30
 rotation_top_n = 20
 
 [scraper]
-interval_sec = 600          # full re-scrape of every source
-concurrency = 10            # parallel source fetches
+interval_sec = 180          # full re-scrape of every source (every 3 minutes)
+concurrency = 20            # parallel source fetches
 timeout_sec = 60
 max_bytes = 33554432        # 32 MiB hard cap per source response
 
@@ -319,3 +319,277 @@ parser = "hideip"
 protocol_hint = "socks5"
 trust_protocol = false
 priority = 3
+
+# ─── New verified high-yield proxy sources ───────────────────────────────────
+
+[[sources]]
+name = "jetkai_all"
+url = "https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies.txt"
+parser = "prefixed"
+trust_protocol = true
+priority = 1
+
+[[sources]]
+name = "shiftytr_all"
+url = "https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/proxy.txt"
+parser = "plain"
+protocol_hint = "http"
+trust_protocol = false
+priority = 3
+
+[[sources]]
+name = "rdavydov_http"
+url = "https://raw.githubusercontent.com/rdavydov/proxy-list/main/proxies/http.txt"
+parser = "plain"
+protocol_hint = "http"
+trust_protocol = true
+priority = 2
+
+[[sources]]
+name = "rdavydov_socks5"
+url = "https://raw.githubusercontent.com/rdavydov/proxy-list/main/proxies/socks5.txt"
+parser = "plain"
+protocol_hint = "socks5"
+trust_protocol = true
+priority = 2
+
+[[sources]]
+name = "rdavydov_socks4"
+url = "https://raw.githubusercontent.com/rdavydov/proxy-list/main/proxies/socks4.txt"
+parser = "plain"
+protocol_hint = "socks4"
+trust_protocol = true
+priority = 2
+
+[[sources]]
+name = "aliilapro_http"
+url = "https://raw.githubusercontent.com/ALIILAPRO/Proxy/main/http.txt"
+parser = "plain"
+protocol_hint = "http"
+trust_protocol = false
+priority = 3
+
+[[sources]]
+name = "aliilapro_socks5"
+url = "https://raw.githubusercontent.com/ALIILAPRO/Proxy/main/socks5.txt"
+parser = "plain"
+protocol_hint = "socks5"
+trust_protocol = false
+priority = 3
+
+[[sources]]
+name = "ercin_http"
+url = "https://raw.githubusercontent.com/ErcinDedeoglu/proxies/main/proxies/http.txt"
+parser = "plain"
+protocol_hint = "http"
+trust_protocol = false
+priority = 3
+
+[[sources]]
+name = "zaeem_http"
+url = "https://raw.githubusercontent.com/Zaeem20/FREE_PROXIES_LIST/master/http.txt"
+parser = "plain"
+protocol_hint = "http"
+trust_protocol = false
+priority = 4
+
+[[sources]]
+name = "zaeem_socks5"
+url = "https://raw.githubusercontent.com/Zaeem20/FREE_PROXIES_LIST/master/socks5.txt"
+parser = "plain"
+protocol_hint = "socks5"
+trust_protocol = false
+priority = 3
+
+[[sources]]
+name = "zaeem_socks4"
+url = "https://raw.githubusercontent.com/Zaeem20/FREE_PROXIES_LIST/master/socks4.txt"
+parser = "plain"
+protocol_hint = "socks4"
+trust_protocol = false
+priority = 3
+
+[[sources]]
+name = "clarketm_raw"
+url = "https://raw.githubusercontent.com/clarketm/proxy-list/master/proxy-list-raw.txt"
+parser = "plain"
+protocol_hint = "http"
+trust_protocol = false
+priority = 3
+
+[[sources]]
+name = "prxchk_http"
+url = "https://raw.githubusercontent.com/prxchk/proxy-list/main/http.txt"
+parser = "plain"
+protocol_hint = "http"
+trust_protocol = true
+priority = 2
+
+[[sources]]
+name = "prxchk_socks4"
+url = "https://raw.githubusercontent.com/prxchk/proxy-list/main/socks4.txt"
+parser = "plain"
+protocol_hint = "socks4"
+trust_protocol = true
+priority = 2
+
+[[sources]]
+name = "proxylistto_http"
+url = "https://raw.githubusercontent.com/proxylist-to/proxy-list/main/http.txt"
+parser = "plain"
+protocol_hint = "http"
+trust_protocol = false
+priority = 3
+
+[[sources]]
+name = "proxylistto_socks5"
+url = "https://raw.githubusercontent.com/proxylist-to/proxy-list/main/socks5.txt"
+parser = "plain"
+protocol_hint = "socks5"
+trust_protocol = false
+priority = 3
+
+[[sources]]
+name = "proxylistto_socks4"
+url = "https://raw.githubusercontent.com/proxylist-to/proxy-list/main/socks4.txt"
+parser = "plain"
+protocol_hint = "socks4"
+trust_protocol = false
+priority = 3
+
+[[sources]]
+name = "zloi_socks4"
+url = "https://raw.githubusercontent.com/zloi-user/hideip.me/main/socks4.txt"
+parser = "hideip"
+protocol_hint = "socks4"
+trust_protocol = false
+priority = 3
+
+# ─── Round 2: Additional verified proxy sources ──────────────────────────────
+
+[[sources]]
+name = "vakhov_socks4"
+url = "https://raw.githubusercontent.com/vakhov/fresh-proxy-list/master/socks4.txt"
+parser = "plain"
+protocol_hint = "socks4"
+trust_protocol = false
+priority = 3
+
+[[sources]]
+name = "zevtyardt_http"
+url = "https://raw.githubusercontent.com/zevtyardt/proxy-list/main/http.txt"
+parser = "plain"
+protocol_hint = "http"
+trust_protocol = false
+priority = 4
+
+[[sources]]
+name = "zevtyardt_socks5"
+url = "https://raw.githubusercontent.com/zevtyardt/proxy-list/main/socks5.txt"
+parser = "plain"
+protocol_hint = "socks5"
+trust_protocol = false
+priority = 3
+
+[[sources]]
+name = "zevtyardt_socks4"
+url = "https://raw.githubusercontent.com/zevtyardt/proxy-list/main/socks4.txt"
+parser = "plain"
+protocol_hint = "socks4"
+trust_protocol = false
+priority = 3
+
+[[sources]]
+name = "proxifly_socks5"
+url = "https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/protocols/socks5/data.txt"
+parser = "prefixed"
+trust_protocol = true
+priority = 1
+
+[[sources]]
+name = "proxifly_socks4"
+url = "https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/protocols/socks4/data.txt"
+parser = "prefixed"
+trust_protocol = true
+priority = 1
+
+[[sources]]
+name = "proxifly_http"
+url = "https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/protocols/http/data.txt"
+parser = "prefixed"
+trust_protocol = true
+priority = 1
+
+[[sources]]
+name = "proxyscrape_v2_http"
+url = "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=10000&country=all&ssl=all&anonymity=all"
+parser = "plain"
+protocol_hint = "http"
+trust_protocol = true
+priority = 1
+
+[[sources]]
+name = "proxyscrape_v2_socks5"
+url = "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=socks5&timeout=10000&country=all"
+parser = "plain"
+protocol_hint = "socks5"
+trust_protocol = true
+priority = 1
+
+[[sources]]
+name = "proxyscrape_v2_socks4"
+url = "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=socks4&timeout=10000&country=all"
+parser = "plain"
+protocol_hint = "socks4"
+trust_protocol = true
+priority = 1
+
+[[sources]]
+name = "monosans_http"
+url = "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt"
+parser = "plain"
+protocol_hint = "http"
+trust_protocol = true
+priority = 2
+
+[[sources]]
+name = "monosans_socks5"
+url = "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks5.txt"
+parser = "plain"
+protocol_hint = "socks5"
+trust_protocol = true
+priority = 2
+
+[[sources]]
+name = "monosans_socks4"
+url = "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks4.txt"
+parser = "plain"
+protocol_hint = "socks4"
+trust_protocol = true
+priority = 2
+
+[[sources]]
+name = "proxy4parsing_http"
+url = "https://raw.githubusercontent.com/proxy4parsing/proxy-list/main/http.txt"
+parser = "plain"
+protocol_hint = "http"
+trust_protocol = false
+priority = 4
+
+[[sources]]
+name = "databay_socks5"
+url = "https://raw.githubusercontent.com/databay-labs/free-proxy-list/master/socks5.txt"
+parser = "plain"
+protocol_hint = "socks5"
+trust_protocol = false
+priority = 3
+
+[[sources]]
+name = "databay_socks4"
+url = "https://raw.githubusercontent.com/databay-labs/free-proxy-list/master/socks4.txt"
+parser = "plain"
+protocol_hint = "socks4"
+trust_protocol = false
+priority = 3
+
+

@@ -68,6 +68,9 @@ class Proxy:
     latency_ms: int | None = None
     google_status: str | None = None
     google_clean: int = 0
+    parser_clean: int = 1
+    aiohttp_clean: int = 1
+    dual_clean: int = 1
     score: float = 0.0
     alive: int = 0
     alive_streak: int = 0

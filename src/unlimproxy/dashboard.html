@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unlim Proxy Engine | Protected Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0b0f19;
+            --bg-card: rgba(17, 24, 39, 0.75);
+            --border-card: rgba(255, 255, 255, 0.08);
+            --accent-primary: #6366f1;
+            --accent-glow: rgba(99, 102, 241, 0.35);
+            --success-color: #10b981;
+            --danger-color: #ef4444;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-primary);
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.1) 0px, transparent 50%);
+            color: var(--text-main);
+            min-height: 100vh;
+            padding: 24px;
+        }
+
+        .container {
+            max-width: 1320px;
+            margin: 0 auto;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border-card);
+            margin-bottom: 24px;
+        }
+
+        .logo-box {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-icon {
+            width: 42px;
+            height: 42px;
+            background: linear-gradient(135deg, #6366f1, #10b981);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 20px;
+            color: white;
+            box-shadow: 0 0 15px var(--accent-glow);
+        }
+
+        .brand-title {
+            font-size: 22px;
+            font-weight: 700;
+            background: linear-gradient(90deg, #fff, #9ca3af);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--success-color);
+        }
+
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--success-color);
+            border-radius: 50%;
+            box-shadow: 0 0 8px var(--success-color);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-card);
+            border-radius: 16px;
+            padding: 20px;
+            backdrop-filter: blur(12px);
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: #ffffff;
+        }
+
+        .stat-sub {
+            font-size: 12px;
+            color: var(--success-color);
+            margin-top: 4px;
+        }
+
+        .card-box {
+            background: var(--bg-card);
+            border: 1px solid var(--border-card);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 24px;
+            backdrop-filter: blur(12px);
+        }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .key-tag {
+            background: rgba(99, 102, 241, 0.15);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            color: #818cf8;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        .link-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-card);
+            padding: 14px 16px;
+            border-radius: 10px;
+            margin-bottom: 12px;
+            gap: 12px;
+        }
+
+        .link-info {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .link-name {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .link-url {
+            font-size: 12px;
+            color: #818cf8;
+            font-family: monospace;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .btn {
+            background: var(--accent-primary);
+            color: white;
+            border: none;
+            padding: 8px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--border-card);
+            color: var(--text-main);
+        }
+
+        .btn-outline:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .controls-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .select-input {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid var(--border-card);
+            border-radius: 8px;
+            padding: 10px 12px;
+            color: white;
+            font-size: 13px;
+            outline: none;
+        }
+
+        .select-input option {
+            background: #111827;
+            color: white;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+            text-align: left;
+        }
+
+        th {
+            padding: 12px 16px;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border-card);
+            font-weight: 500;
+        }
+
+        td {
+            padding: 12px 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+        }
+
+        .badge {
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .badge-socks5 { background: rgba(99, 102, 241, 0.2); color: #818cf8; }
+        .badge-socks4 { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+        .badge-http { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+        .badge-target-dual { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+        .badge-target-yt { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+        .badge-target-aio { background: rgba(99, 102, 241, 0.2); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3); }
+        .badge-200 { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: var(--accent-primary);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            display: none;
+            font-size: 14px;
+            z-index: 10000;
+        }
+
+        .tabs-bar {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+            border-bottom: 1px solid var(--border-card);
+            padding-bottom: 12px;
+        }
+
+        .tab-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .tab-btn.active {
+            background: var(--accent-primary);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo-box">
+                <div class="logo-icon">P</div>
+                <div>
+                    <div class="brand-title">UNLIM PROXY ENGINE</div>
+                    <div style="font-size: 12px; color: var(--text-muted);">Dual-Check Rotator & Live API</div>
+                </div>
+            </div>
+            <div style="display: flex; gap: 12px; align-items: center;">
+                <span class="key-tag" id="currentKeyTag">Key: --</span>
+                <button class="btn btn-outline" onclick="logout()">🔒 Выйти</button>
+                <a href="/docs" target="_blank" class="btn btn-outline">📘 API Docs</a>
+                <div class="status-badge">
+                    <div class="pulse-dot"></div>
+                    ONLINE
+                </div>
+            </div>
+        </header>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">Всего кандидатов</div>
+                <div class="stat-value" id="statTotal">--</div>
+                <div class="stat-sub">С 30 паблик источников</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Живой Пул (Alive)</div>
+                <div class="stat-value" style="color: var(--success-color);" id="statAlive">--</div>
+                <div class="stat-sub" id="statAliveSub">Свежесть &lt; 5 минут</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Скорость чекинга</div>
+                <div class="stat-value" id="statSpeed">--</div>
+                <div class="stat-sub">проверок в минуту</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Средний Пинг</div>
+                <div class="stat-value" id="statLatency">--</div>
+                <div class="stat-sub">время отклика</div>
+            </div>
+        </div>
+
+        <!-- Custom Links Generator -->
+        <div class="card-box">
+            <div class="section-title">
+                <span>🔗 Конструктор Готовых Ссылок (Со вшитым API-Ключом)</span>
+                <span style="font-size: 12px; font-weight: normal; color: var(--text-muted);">Ключ автоматически подставлен</span>
+            </div>
+
+            <div class="controls-grid">
+                <div>
+                    <label style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px; display: block;">Целевой модуль:</label>
+                    <select id="selTarget" class="select-input" onchange="buildCustomUrl()">
+                        <option value="parser">Парсер YouTube</option>
+                        <option value="aiohttp">Чекер каналов (aiohttp direct)</option>
+                        <option value="google">Обычный Google Clean</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px; display: block;">Количество / Лимит:</label>
+                    <select id="selType" class="select-input" onchange="buildCustomUrl()">
+                        <option value="unlimited">♾️ ВСЕ прокси БЕЗ ЛИМИТА (Unlimited)</option>
+                        <option value="single">1 Ротированный Прокси (/v1/proxy)</option>
+                        <option value="50">Список из 50 Прокси (/v1/proxies)</option>
+                        <option value="100">Список из 100 Прокси (/v1/proxies)</option>
+                        <option value="500">Список из 500 Прокси (/v1/proxies)</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px; display: block;">Формат выгрузки:</label>
+                    <select id="selFormat" class="select-input" onchange="buildCustomUrl()">
+                        <option value="txt">TXT (одна строка = 1 прокси)</option>
+                        <option value="json">JSON</option>
+                        <option value="csv">CSV</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px; display: block;">Протокол:</label>
+                    <select id="selProto" class="select-input" onchange="buildCustomUrl()">
+                        <option value="all">Все (SOCKS5 / SOCKS4 / HTTP)</option>
+                        <option value="socks5">Только SOCKS5</option>
+                        <option value="socks4">Только SOCKS4</option>
+                        <option value="http">Только HTTP</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="link-row">
+                <div class="link-info">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                        <span class="link-name" id="customName">Персональная ссылка выгрузки:</span>
+                        <span id="builderCountBadge" style="font-size: 13px; font-weight: 600; color: var(--success-color);">Найдено подходящих прокси: -- шт.</span>
+                    </div>
+                    <div class="link-url" id="customUrl">--</div>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-outline" onclick="copyText('customUrl')">📋 Копировать</button>
+                    <a href="#" id="customOpenBtn" target="_blank" class="btn">📥 Открыть</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabs: Proxy Pool vs API Logs -->
+        <div class="tabs-bar">
+            <button class="tab-btn active" id="tabProxyBtn" onclick="switchTab('proxies')">⚡ Свежий Пул Прокси</button>
+            <button class="tab-btn" id="tabLogsBtn" onclick="switchTab('logs')">📜 Журнал Запросов (API Logs)</button>
+        </div>
+
+        <!-- Proxies Table -->
+        <div class="card-box" id="tabProxiesView">
+            <div class="section-title">
+                <span>Свежие проверенные прокси в реальном времени</span>
+                <span id="proxyCountBadge" style="font-size: 12px; font-weight: 500; color: var(--success-color);">Отображается прокси: --</span>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Протокол</th>
+                        <th>Прокси (IP:Port)</th>
+                        <th>Назначение (Target)</th>
+                        <th>Страна</th>
+                        <th>Анонимность</th>
+                        <th>Задержка</th>
+                        <th>Балл</th>
+                        <th>Свежесть</th>
+                    </tr>
+                </thead>
+                <tbody id="proxyTableBody">
+                    <tr><td colspan="8" style="text-align:center; padding: 24px; color: var(--text-muted);">Загрузка прокси...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- API Logs Table -->
+        <div class="card-box" id="tabLogsView" style="display: none;">
+            <div class="section-title">Последние входящие запросы к серверу API (API Request Logs)</div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Время</th>
+                        <th>IP Клиента</th>
+                        <th>Метод</th>
+                        <th>Эндпоинт / Путь</th>
+                        <th>Статус</th>
+                    </tr>
+                </thead>
+                <tbody id="logsTableBody">
+                    <tr><td colspan="5" style="text-align:center; padding: 24px; color: var(--text-muted);">Загрузка логов...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="toast" id="toast">Ссылка скопирована в буфер обмена!</div>
+
+    <script>
+        const host = window.location.origin;
+
+        function getKey() {
+            const params = new URLSearchParams(window.location.search);
+            const queryKey = params.get('api_key') || params.get('key');
+            if (queryKey) {
+                localStorage.setItem('unlim_api_key', queryKey);
+                return queryKey;
+            }
+            return localStorage.getItem('unlim_api_key') || '';
+        }
+
+        const apiKey = getKey();
+        if (!apiKey) {
+            window.location.href = host + '/';
+        } else {
+            document.getElementById('currentKeyTag').innerText = 'Key: ' + apiKey.substring(0, 12) + '...';
+        }
+
+        function logout() {
+            localStorage.removeItem('unlim_api_key');
+            window.location.href = host + '/';
+        }
+
+        function getHeaders() {
+            return apiKey ? { 'X-API-Key': apiKey } : {};
+        }
+
+        async function updateBuilderCount() {
+            const target = document.getElementById('selTarget').value;
+            const proto = document.getElementById('selProto').value;
+            let checkUrl = `${host}/v1/proxies?target=${target}&limit=100000`;
+            if (proto !== 'all') checkUrl += `&protocol=${proto}`;
+
+            try {
+                const res = await fetch(checkUrl, { headers: getHeaders() });
+                if (res.ok) {
+                    const data = await res.json();
+                    const list = data.proxies || data;
+                    document.getElementById('builderCountBadge').innerText = `Подходящих прокси по фильтрам: ${list.length} шт.`;
+                }
+            } catch (e) {}
+        }
+
+        function buildCustomUrl() {
+            const target = document.getElementById('selTarget').value;
+            const type = document.getElementById('selType').value;
+            const format = document.getElementById('selFormat').value;
+            const proto = document.getElementById('selProto').value;
+
+            let url = host;
+            if (type === 'single') {
+                url += `/v1/proxy?target=${target}&api_key=${encodeURIComponent(apiKey)}`;
+                if (proto !== 'all') url += `&protocol=${proto}`;
+            } else if (type === 'unlimited') {
+                url += `/v1/proxies?target=${target}&format=${format}&limit=100000&api_key=${encodeURIComponent(apiKey)}`;
+                if (proto !== 'all') url += `&protocol=${proto}`;
+            } else {
+                url += `/v1/proxies?target=${target}&format=${format}&limit=${type}&api_key=${encodeURIComponent(apiKey)}`;
+                if (proto !== 'all') url += `&protocol=${proto}`;
+            }
+
+            document.getElementById('customUrl').innerText = url;
+            document.getElementById('customOpenBtn').href = url;
+
+            updateBuilderCount();
+        }
+
+        async function fetchStats() {
+            try {
+                const res = await fetch(host + '/v1/stats', { headers: getHeaders() });
+                if (!res.ok) return;
+                const data = await res.json();
+                document.getElementById('statTotal').innerText = (data.pool.total || 0).toLocaleString();
+                document.getElementById('statAlive').innerText = (data.pool.alive || 0).toLocaleString();
+                document.getElementById('statSpeed').innerText = (data.checks.l1_per_min || 0) + ' / мин';
+                
+                const socks5 = data.by_protocol.socks5 || 0;
+                const socks4 = data.by_protocol.socks4 || 0;
+                const http = data.by_protocol.http || 0;
+                document.getElementById('statAliveSub').innerText = `SOCKS5: ${socks5} | SOCKS4: ${socks4} | HTTP: ${http}`;
+            } catch (e) {}
+        }
+
+        async function fetchProxies() {
+            try {
+                const res = await fetch(host + '/v1/proxies?limit=100', { headers: getHeaders() });
+                if (!res.ok) return;
+                const data = await res.json();
+                const proxies = data.proxies || data;
+                
+                if (Array.isArray(proxies)) {
+                    document.getElementById('proxyCountBadge').innerText = `Отображается прокси: ${proxies.length}`;
+
+                    let latencies = proxies.map(p => p.latency_ms).filter(l => l > 0);
+                    let avgLat = latencies.length ? Math.round(latencies.reduce((a,b) => a+b, 0) / latencies.length) : '--';
+                    document.getElementById('statLatency').innerText = avgLat !== '--' ? avgLat + ' ms' : '--';
+
+                    const tbody = document.getElementById('proxyTableBody');
+                    tbody.innerHTML = '';
+                    if (proxies.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding: 24px; color: var(--text-muted);">Идет пополнение пула...</td></tr>';
+                        return;
+                    }
+                    proxies.forEach(p => {
+                        const row = document.createElement('tr');
+                        const badgeClass = p.protocol === 'socks5' ? 'badge-socks5' : (p.protocol === 'socks4' ? 'badge-socks4' : 'badge-http');
+                        
+                        let targetBadge = '<span class="badge badge-target-dual">🌐 Все задачи</span>';
+                        if (p.parser_clean && !p.aiohttp_clean) {
+                            targetBadge = '<span class="badge badge-target-yt">🟢 Парсер</span>';
+                        } else if (!p.parser_clean && p.aiohttp_clean) {
+                            targetBadge = '<span class="badge badge-target-aio">🔵 aiohttp</span>';
+                        } else if (p.parser_clean && p.aiohttp_clean) {
+                            targetBadge = '<span class="badge badge-target-dual">🌐 Все задачи (Dual)</span>';
+                        }
+
+                        row.innerHTML = `
+                            <td><span class="badge ${badgeClass}">${p.protocol}</span></td>
+                            <td style="font-family: monospace; font-weight: 600;">${p.proxy}</td>
+                            <td>${targetBadge}</td>
+                            <td>${p.country || 'GLOBAL'} (${p.country_name || 'World'})</td>
+                            <td>${p.anonymity || 'elite'}</td>
+                            <td>${p.latency_ms || 0} ms</td>
+                            <td style="color: var(--success-color); font-weight: 600;">${p.score}</td>
+                            <td>${p.age_sec} сек назад</td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                }
+            } catch (e) {}
+        }
+
+        async function fetchLogs() {
+            try {
+                const res = await fetch(host + '/v1/logs', { headers: getHeaders() });
+                if (!res.ok) return;
+                const data = await res.json();
+                const tbody = document.getElementById('logsTableBody');
+                tbody.innerHTML = '';
+                if (!data.logs || data.logs.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 24px; color: var(--text-muted);">Логи пока пустые...</td></tr>';
+                    return;
+                }
+                data.logs.forEach(l => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td style="color: var(--text-muted); font-family: monospace;">${l.time}</td>
+                        <td style="font-family: monospace; font-weight: 600;">${l.client_ip}</td>
+                        <td><span class="badge badge-socks5">${l.method}</span></td>
+                        <td style="font-family: monospace; color: #818cf8;">${l.path}${l.query ? '?' + l.query : ''}</td>
+                        <td><span class="badge badge-200">${l.status}</span></td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            } catch (e) {}
+        }
+
+        function copyText(elementId) {
+            const text = document.getElementById(elementId).innerText;
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text);
+            } else {
+                const area = document.createElement('textarea');
+                area.value = text;
+                area.style.position = 'fixed';
+                area.style.opacity = '0';
+                document.body.appendChild(area);
+                area.select();
+                document.execCommand('copy');
+                document.body.removeChild(area);
+            }
+            const toast = document.getElementById('toast');
+            toast.style.display = 'block';
+            setTimeout(() => { toast.style.display = 'none'; }, 2200);
+        }
+
+        function switchTab(tab) {
+            if (tab === 'proxies') {
+                document.getElementById('tabProxiesView').style.display = 'block';
+                document.getElementById('tabLogsView').style.display = 'none';
+                document.getElementById('tabProxyBtn').classList.add('active');
+                document.getElementById('tabLogsBtn').classList.remove('active');
+            } else {
+                document.getElementById('tabProxiesView').style.display = 'none';
+                document.getElementById('tabLogsView').style.display = 'block';
+                document.getElementById('tabProxyBtn').classList.remove('active');
+                document.getElementById('tabLogsBtn').classList.add('active');
+                fetchLogs();
+            }
+        }
+
+        buildCustomUrl();
+        fetchStats();
+        fetchProxies();
+        setInterval(fetchStats, 5000);
+        setInterval(fetchProxies, 8000);
+    </script>
+</body>
+</html>

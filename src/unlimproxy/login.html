@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unlim Proxy Engine | Authentication Required</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0b0f19;
+            --bg-card: rgba(17, 24, 39, 0.9);
+            --border-card: rgba(255, 255, 255, 0.08);
+            --accent-primary: #6366f1;
+            --accent-glow: rgba(99, 102, 241, 0.35);
+            --danger-color: #ef4444;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-primary);
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.1) 0px, transparent 50%);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .auth-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-card);
+            border-radius: 20px;
+            padding: 40px 36px;
+            width: 100%;
+            max-width: 420px;
+            text-align: center;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5), 0 0 30px var(--accent-glow);
+            backdrop-filter: blur(16px);
+        }
+
+        .auth-icon {
+            width: 64px;
+            height: 64px;
+            background: linear-gradient(135deg, #6366f1, #10b981);
+            border-radius: 16px;
+            margin: 0 auto 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            color: white;
+            box-shadow: 0 0 20px var(--accent-glow);
+        }
+
+        .auth-title {
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            background: linear-gradient(90deg, #fff, #9ca3af);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .auth-desc {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-bottom: 24px;
+            line-height: 1.5;
+        }
+
+        .auth-input {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid var(--border-card);
+            border-radius: 10px;
+            padding: 14px 16px;
+            color: white;
+            font-size: 15px;
+            margin-bottom: 16px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .auth-input:focus {
+            border-color: var(--accent-primary);
+        }
+
+        .auth-btn {
+            width: 100%;
+            background: var(--accent-primary);
+            color: white;
+            border: none;
+            padding: 14px;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .auth-btn:hover {
+            opacity: 0.9;
+        }
+
+        .auth-error {
+            color: var(--danger-color);
+            font-size: 13px;
+            margin-top: 14px;
+            display: none;
+            background: rgba(239, 68, 68, 0.1);
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="auth-card">
+        <div class="auth-icon">🔒</div>
+        <div class="auth-title">UNLIM PROXY ENGINE</div>
+        <div class="auth-desc">Доступ к панели управления защищен. Введите ваш API-ключ для входа:</div>
+        <input type="password" id="keyInput" class="auth-input" placeholder="Введите API Key..." onkeydown="if(event.key==='Enter') login()">
+        <button class="auth-btn" onclick="login()">Войти в систему</button>
+        <div id="authError" class="auth-error">Неверный API-ключ! Доступ запрещен.</div>
+    </div>
+
+    <script>
+        const host = window.location.origin;
+
+        async function login() {
+            const key = document.getElementById('keyInput').value.trim();
+            if (!key) return;
+            try {
+                const res = await fetch(host + '/v1/auth/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key: key })
+                });
+                if (res.ok) {
+                    localStorage.setItem('unlim_api_key', key);
+                    window.location.href = host + '/dashboard?api_key=' + encodeURIComponent(key);
+                } else {
+                    document.getElementById('authError').style.display = 'block';
+                }
+            } catch (e) {
+                document.getElementById('authError').innerText = 'Ошибка соединения с сервером!';
+                document.getElementById('authError').style.display = 'block';
+            }
+        }
+
+        // Auto redirect if key is stored and valid
+        (async function autoCheck() {
+            const stored = localStorage.getItem('unlim_api_key');
+            if (stored) {
+                try {
+                    const res = await fetch(host + '/v1/auth/verify', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ key: stored })
+                    });
+                    if (res.ok) {
+                        window.location.href = host + '/dashboard?api_key=' + encodeURIComponent(stored);
+                    }
+                } catch (e) {}
+            }
+        })();
+    </script>
+</body>
+</html>

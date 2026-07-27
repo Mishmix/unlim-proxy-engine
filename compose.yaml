@@ -9,10 +9,9 @@ services:
     volumes:
       - ./data:/app/data
       - ./config.toml:/app/config.toml:ro
-    # Anything in .env reaches the process: API_KEY and any UNLIMPROXY_* override.
+    # env_file configuration
     env_file:
-      - path: .env
-        required: false
+      - .env
     environment:
       # Leave empty to keep the API open. Set it to require `X-API-Key`.
       API_KEY: "${API_KEY:-}"
@@ -22,3 +21,11 @@ services:
       nofile:
         soft: 65535
         hard: 65535
+    deploy:
+      resources:
+        limits:
+          cpus: '0.60'
+          memory: 512M
+        reservations:
+          cpus: '0.10'
+          memory: 128M
