@@ -66,17 +66,28 @@ async def test_only_search_ok_sets_google_clean(storage):
         assert row["google_clean"] == expected, status
 
 
-async def test_cold_queue_orders_by_protocol_then_source_rank(storage):
-    """Both orderings must happen in SQL — a bad source's huge dump would otherwise
-    fill any window that gets re-sorted in Python."""
+async def test_cold_queue_gives_better_sources_proportionally_more_slots(storage):
+    """Ordering is a stride, not a hard rank: every source appears, a good one just
+    appears more often. Supply is equal here so the shares reflect only the weights."""
     await storage.upsert_candidates(
-        [Candidate(f"203.0.113.{i}", 8080, "junk", None) for i in range(1, 60)]
-        + [Candidate("198.51.100.1", 1080, "good", "socks5")]
-        + [Candidate(f"198.51.100.{i}", 8080, "good", None) for i in range(2, 5)]
+        [Candidate(f"203.0.113.{i}", 8080, "junk", "socks5") for i in range(1, 61)]
+        + [Candidate(f"198.51.100.{i}", 8080, "good", "socks5") for i in range(1, 61)]
+        + [Candidate(f"192.0.2.{i}", 8080, "mid", "socks5") for i in range(1, 61)]
     )
-    batch = await storage.fetch_cold(5, {"good": 0.9, "junk": 0.001})
-    assert batch[0].protocol == "socks5"
-    assert [p.source for p in batch[1:4]] == ["good"] * 3
+    weights = {"good": 0.8, "mid": 0.2, "junk": 0.001}
+    window = [p.source for p in await storage.fetch_cold(60, weights)]
+    share = {name: window.count(name) for name in weights}
+    assert share["good"] > share["mid"] > share["junk"] >= 1, share
+
+
+async def test_cold_queue_puts_socks5_first_within_a_round(storage):
+    await storage.upsert_candidates(
+        [
+            Candidate("198.51.100.1", 8080, "good", None),
+            Candidate("198.51.100.2", 1080, "good", "socks5"),
+        ]
+    )
+    assert (await storage.fetch_cold(1, {"good": 0.9}))[0].protocol == "socks5"
 
 
 async def test_cold_queue_survives_an_empty_source_ranking(storage):
@@ -218,3 +229,31 @@ async def test_open_adds_columns_to_a_database_created_before_they_existed(tmp_p
         assert await reopened.fetch_yt_due(5, "2099-01-01T00:00:00Z") == []
     finally:
         await reopened.close()
+
+
+async def test_cold_queue_samples_every_source_before_repeating_one(storage):
+    """Regression: a 20 000-row window on the live database went entirely to two
+    sources, and 15 668 of those checks came back empty. One source must not be able
+    to starve the rest before its hit rate has been measured."""
+    await storage.upsert_candidates(
+        [Candidate(f"203.0.113.{i}", 8080, "flood", "socks5") for i in range(1, 60)]
+        + [Candidate("198.51.100.1", 8080, "small_a", "socks5")]
+        + [Candidate("198.51.100.2", 8080, "small_b", "socks5")]
+    )
+    batch = await storage.fetch_cold(6, {"flood": 0.02, "small_a": 0.02, "small_b": 0.02})
+    # Equal weights, so the first round covers every source before the big one recurs.
+    assert {p.source for p in batch[:3]} == {"flood", "small_a", "small_b"}
+    assert [p.source for p in batch[3:]] == ["flood"] * 3
+
+
+async def test_a_source_scored_to_zero_still_gets_occasional_slots(storage):
+    """`cold_queue_weight` zeroes a proven-bad source. It must be rare, not silent —
+    a dead list still contributes addresses no other list carries."""
+    await storage.upsert_candidates(
+        [Candidate(f"203.0.113.{i}", 8080, "dead", "socks5") for i in range(1, 40)]
+        + [Candidate(f"198.51.100.{i}", 8080, "live", "socks5") for i in range(1, 40)]
+    )
+    batch = await storage.fetch_cold(40, {"live": 0.3, "dead": 0.0})
+    sources = [p.source for p in batch]
+    assert sources.count("dead") >= 1
+    assert sources.count("live") > sources.count("dead") * 4

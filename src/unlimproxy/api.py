@@ -198,12 +198,16 @@ def create_app(settings: Settings, scheduler: Scheduler) -> FastAPI:
         if request.url.path.startswith("/v1/"):
             client_ip = request.client.host if request.client else "unknown"
             ts = datetime.now(UTC).strftime("%H:%M:%S")
+            # Anyone who can reach /v1 lands in this ring, including requests that
+            # failed auth, so the recorded strings are attacker-chosen. The dashboard
+            # escapes them; capping the length here keeps one caller from filling the
+            # whole view with a single request.
             app.state.api_logs.insert(0, {
                 "time": ts,
                 "client_ip": client_ip,
                 "method": request.method,
-                "path": str(request.url.path),
-                "query": str(request.url.query),
+                "path": str(request.url.path)[:200],
+                "query": str(request.url.query)[:200],
                 "status": response.status_code
             })
             if len(app.state.api_logs) > 100:

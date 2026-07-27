@@ -21,6 +21,32 @@ log = logging.getLogger(__name__)
 
 HISTORY_WINDOW = 20
 
+# How many rounds of the cold queue a source has to sit out between its own candidates.
+# 1 means it appears in every round; the worst sources appear in one round out of 40.
+_BEST_STRIDE, _WORST_STRIDE, _UNRANKED_STRIDE, _DEAD_STRIDE = 1, 8, 8, 40
+
+
+def _cold_stride(weight: float, best: float) -> int:
+    """How many rounds a source sits out between its own candidates.
+
+    Pure round-robin samples every source, which is what a cold start needs, but it
+    also gives a dump that has proven worthless exactly as many slots as the best
+    curated feed. Pure rank ordering does the opposite and lets one source own the
+    whole window. Striding is the middle: everyone appears, a source appears as often
+    as its hit rate compares to the best one, and a source `cold_queue_weight` has
+    zeroed appears rarely without ever being switched off — it still contributes
+    unique addresses.
+
+    The ratio is against the best weight rather than the rank position, so sources
+    that have not been measured yet all share one weight and therefore one stride
+    instead of being spread out by an ordering that means nothing.
+    """
+    if weight <= 0:
+        return _DEAD_STRIDE
+    if best <= 0:
+        return _BEST_STRIDE
+    return min(_WORST_STRIDE, max(_BEST_STRIDE, round(best / weight)))
+
 TABLES = """
 CREATE TABLE IF NOT EXISTS proxies (
   id INTEGER PRIMARY KEY,
@@ -331,26 +357,43 @@ class Storage:
     # ─── queue selection ───────────────────────────────────────────────────
 
     async def fetch_cold(self, limit: int, source_scores: dict[str, float]) -> list[Proxy]:
-        """Never-checked candidates, SOCKS5 → SOCKS4 → unknown → HTTP, then by source
-        hit rate (RESEARCH 1.2: 32 % / 14.5 % / 1.0 %, and 1.4 on junk sources).
+        """Never-checked candidates, one round of every source at a time, and within a
+        round SOCKS5 → SOCKS4 → unknown → HTTP then by source hit rate (RESEARCH 1.2:
+        32 % / 14.5 % / 1.0 %, and 1.4 on junk sources).
 
-        Both orderings have to happen in SQL. Sorting a pre-fetched window in Python
-        does nothing once the backlog is one bad source's 100 000-line dump — every row
-        in the window comes from that same source.
+        Ordering by rank alone lets a single source own the whole window: on a live
+        664 000-row backlog, a 20 000-row window went entirely to two sources and one
+        of them spent 15 668 checks to return nothing. Ranking cannot fix that, because
+        a source with no measured hit rate yet falls back to its configured priority
+        and ties with a dozen others. `ROW_NUMBER` per source turns the window into
+        rounds, so every source is sampled early enough for `cold_queue_weight` to
+        learn what it is worth and demote it.
+
+        All of it has to stay in SQL; re-sorting a pre-fetched window in Python cannot
+        recover rows the window never contained.
         """
         ranked = sorted(source_scores, key=lambda name: -source_scores[name])
         if ranked:
-            branches = " ".join(f"WHEN ? THEN {rank}" for rank in range(len(ranked)))
-            source_order = f"CASE source {branches} ELSE {len(ranked)} END"
+            best = source_scores[ranked[0]]
+            branches = " ".join(
+                f"WHEN ? THEN {_cold_stride(source_scores[name], best)}" for name in ranked
+            )
+            stride = f"CASE source {branches} ELSE {_UNRANKED_STRIDE} END"
             params: tuple[Any, ...] = (*ranked, limit)
         else:
-            # A bare integer in ORDER BY is a column ordinal to SQLite, not a constant.
-            source_order, params = "NULL", (limit,)
+            stride, params = "1", (limit,)
+        protocol_order = (
+            "CASE protocol WHEN 'socks5' THEN 0 WHEN 'socks4' THEN 1 "
+            "WHEN 'unknown' THEN 2 ELSE 3 END"
+        )
         return await self._proxies(
-            f"""SELECT * FROM proxies WHERE last_check_at IS NULL
-                ORDER BY CASE protocol WHEN 'socks5' THEN 0 WHEN 'socks4' THEN 1
-                                       WHEN 'unknown' THEN 2 ELSE 3 END,
-                         {source_order}, id
+            f"""SELECT * FROM (
+                    SELECT *, ROW_NUMBER() OVER (
+                        PARTITION BY source ORDER BY {protocol_order}, id
+                    ) AS cold_round
+                    FROM proxies WHERE last_check_at IS NULL
+                )
+                ORDER BY cold_round * ({stride}), {protocol_order}, id
                 LIMIT ?""",
             params,
         )

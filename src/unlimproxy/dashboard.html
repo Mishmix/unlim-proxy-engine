@@ -378,7 +378,8 @@
                     <select id="selTarget" class="select-input" onchange="buildCustomUrl()">
                         <option value="parser">Парсер YouTube</option>
                         <option value="aiohttp">Чекер каналов (aiohttp direct)</option>
-                        <option value="google">Обычный Google Clean</option>
+                        <option value="youtube">YouTube: обе проверки (Dual)</option>
+                            <option value="google">Обычный Google Clean</option>
                     </select>
                 </div>
 
@@ -532,17 +533,15 @@
             const format = document.getElementById('selFormat').value;
             const proto = document.getElementById('selProto').value;
 
-            let url = host;
-            if (type === 'single') {
-                url += `/v1/proxy?target=${target}&api_key=${encodeURIComponent(apiKey)}`;
-                if (proto !== 'all') url += `&protocol=${proto}`;
-            } else if (type === 'unlimited') {
-                url += `/v1/proxies?target=${target}&format=${format}&limit=100000&api_key=${encodeURIComponent(apiKey)}`;
-                if (proto !== 'all') url += `&protocol=${proto}`;
-            } else {
-                url += `/v1/proxies?target=${target}&format=${format}&limit=${type}&api_key=${encodeURIComponent(apiKey)}`;
-                if (proto !== 'all') url += `&protocol=${proto}`;
-            }
+            // `google` is the google_clean flag, not a ?target= value — sending it as
+            // one is rejected with a 422.
+            const selector = target === 'google' ? 'google_clean=true' : `target=${target}`;
+            const path = type === 'single' ? '/v1/proxy' : '/v1/proxies';
+            const limit = type === 'unlimited' ? 100000 : type;
+
+            let url = `${host}${path}?${selector}&api_key=${encodeURIComponent(apiKey)}`;
+            if (type !== 'single') url += `&format=${format}&limit=${limit}`;
+            if (proto !== 'all') url += `&protocol=${proto}`;
 
             document.getElementById('customUrl').innerText = url;
             document.getElementById('customOpenBtn').href = url;
@@ -590,24 +589,24 @@
                         const row = document.createElement('tr');
                         const badgeClass = p.protocol === 'socks5' ? 'badge-socks5' : (p.protocol === 'socks4' ? 'badge-socks4' : 'badge-http');
                         
-                        let targetBadge = '<span class="badge badge-target-dual">🌐 Все задачи</span>';
-                        if (p.parser_clean && !p.aiohttp_clean) {
-                            targetBadge = '<span class="badge badge-target-yt">🟢 Парсер</span>';
-                        } else if (!p.parser_clean && p.aiohttp_clean) {
-                            targetBadge = '<span class="badge badge-target-aio">🔵 aiohttp</span>';
-                        } else if (p.parser_clean && p.aiohttp_clean) {
+                        let targetBadge = '<span class="badge badge-http">⚪ Не проверен</span>';
+                        if (p.parser_clean && p.aiohttp_clean) {
                             targetBadge = '<span class="badge badge-target-dual">🌐 Все задачи (Dual)</span>';
+                        } else if (p.parser_clean) {
+                            targetBadge = '<span class="badge badge-target-yt">🟢 Парсер</span>';
+                        } else if (p.aiohttp_clean) {
+                            targetBadge = '<span class="badge badge-target-aio">🔵 aiohttp</span>';
                         }
 
                         row.innerHTML = `
-                            <td><span class="badge ${badgeClass}">${p.protocol}</span></td>
-                            <td style="font-family: monospace; font-weight: 600;">${p.proxy}</td>
+                            <td><span class="badge ${badgeClass}">${esc(p.protocol)}</span></td>
+                            <td style="font-family: monospace; font-weight: 600;">${esc(p.proxy)}</td>
                             <td>${targetBadge}</td>
-                            <td>${p.country || 'GLOBAL'} (${p.country_name || 'World'})</td>
-                            <td>${p.anonymity || 'elite'}</td>
-                            <td>${p.latency_ms || 0} ms</td>
-                            <td style="color: var(--success-color); font-weight: 600;">${p.score}</td>
-                            <td>${p.age_sec} сек назад</td>
+                            <td>${esc(p.country || 'GLOBAL')} (${esc(p.country_name || 'World')})</td>
+                            <td>${esc(p.anonymity || '—')}</td>
+                            <td>${Number(p.latency_ms) || 0} ms</td>
+                            <td style="color: var(--success-color); font-weight: 600;">${Number(p.score) || 0}</td>
+                            <td>${Number(p.age_sec) || 0} сек назад</td>
                         `;
                         tbody.appendChild(row);
                     });
@@ -629,15 +628,21 @@
                 data.logs.forEach(l => {
                     const row = document.createElement('tr');
                     row.innerHTML = `
-                        <td style="color: var(--text-muted); font-family: monospace;">${l.time}</td>
-                        <td style="font-family: monospace; font-weight: 600;">${l.client_ip}</td>
-                        <td><span class="badge badge-socks5">${l.method}</span></td>
-                        <td style="font-family: monospace; color: #818cf8;">${l.path}${l.query ? '?' + l.query : ''}</td>
-                        <td><span class="badge badge-200">${l.status}</span></td>
+                        <td style="color: var(--text-muted); font-family: monospace;">${esc(l.time)}</td>
+                        <td style="font-family: monospace; font-weight: 600;">${esc(l.client_ip)}</td>
+                        <td><span class="badge badge-socks5">${esc(l.method)}</span></td>
+                        <td style="font-family: monospace; color: #818cf8;">${esc(l.path)}${l.query ? '?' + esc(l.query) : ''}</td>
+                        <td><span class="badge badge-200">${Number(l.status) || 0}</span></td>
                     `;
                     tbody.appendChild(row);
                 });
             } catch (e) {}
+        }
+
+        function esc(value) {
+            return String(value ?? '').replace(/[&<>"']/g, c => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[c]);
         }
 
         function copyText(elementId) {

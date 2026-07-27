@@ -3,7 +3,7 @@
 A self-hosted, self-updating pool of free proxies, validated against Google and served
 over an HTTP API with rotation.
 
-It continuously scrapes 30 public proxy lists, verifies every candidate twice — once for
+It continuously scrapes 84 public proxy lists, verifies every candidate twice — once for
 liveness, once by actually loading a Google search results page — enriches the survivors
 with offline GeoIP and ASN data, and hands them out sorted by a quality score.
 
@@ -224,17 +224,32 @@ which is what `asn_type` is for.
 
 | Queue | Contents | Interval | Concurrency |
 |---|---|---|---|
-| `cold` | new candidates from scraping | continuous | 400 |
+| `cold` | new candidates from scraping | continuous | 1000 |
 | `hot` | confirmed alive | 90 s | 100 |
 | `warm` | were alive, failed up to 3 times in a row | 5 min | 200 |
 | `l2` | hot proxies whose Google check is over 10 min old | 10 min per proxy | 30 |
 | `quarantine` | 3+ consecutive failures | 30 min, one more chance | 50 |
+| `youtube` | hot proxies, for the `?target=` filter | 30 min per proxy | 20 |
 
 Ten consecutive failures deletes the proxy. So does being absent from every source for
 seven days while dead.
 
 A given proxy is never Google-checked more than once per 10 minutes — hammering
 `/search` is itself what triggers the captcha.
+
+The cold queue hands out slots in rounds: one candidate from every source, then the next
+from every source, and only within a round does protocol and source hit rate decide the
+order. Straight rank ordering does not survive a large backlog — on a 664 000-row
+database a 20 000-candidate window went entirely to two sources, and one of them spent
+15 668 checks to return nothing. A source with no measured hit rate yet falls back to its
+configured priority and ties with a dozen others, so ranking alone cannot break that up.
+Rounds sample every source early enough for the scoring to learn what each one is worth.
+
+The cold queue is also the only queue that TCP-pre-probes candidates whose protocol is
+already labelled. That is worth about +61 % throughput and costs a few live proxies whose
+SYN-ACK is slower than `tcp_probe_timeout_sec`; acceptable when triaging half a million
+addresses that are mostly dead, and not acceptable on the queues that re-verify proxies
+already in the pool, where a false negative evicts something good.
 
 ---
 
@@ -246,7 +261,7 @@ environment variable named `UNLIMPROXY_<SECTION>__<KEY>`:
 
 ```bash
 UNLIMPROXY_APP__LOG_LEVEL=DEBUG
-UNLIMPROXY_QUEUES__COLD_CONCURRENCY=200      # lower this on a 1 vCPU VPS
+UNLIMPROXY_QUEUES__COLD_CONCURRENCY=200      # lower this behind consumer NAT
 UNLIMPROXY_APP__ROTATION_COOLDOWN_SEC=60
 API_KEY=your-secret-here                     # enables X-API-Key on /v1/*
 ```
@@ -257,7 +272,7 @@ Adding a source means adding a block:
 [[sources]]
 name = "example"
 url = "https://example.com/proxies.txt"
-parser = "prefixed"        # prefixed | plain | geonode | hideip
+parser = "scan"            # scan | prefixed | plain | geonode | hideip
 protocol_hint = "socks5"   # for the plain parser
 trust_protocol = false     # false = ignore the label, detect by handshake
 priority = 2               # 1 is checked first
@@ -269,6 +284,15 @@ priority = 2               # 1 is checked first
 | `plain` | `1.2.3.4:8080` |
 | `geonode` | geonode's JSON API, with country/ASN/anonymity metadata |
 | `hideip` | `1.2.3.4:8080:CountryName` |
+| `scan` | anything — see below |
+
+`scan` is the one to reach for with a new source. Public lists ship the same data as CSV
+rows, JSON documents, pipe-delimited tables and bare lines, and they reshuffle their
+columns without warning. Rather than a parser per layout, `scan` pulls every address out
+of the body wherever it sits, taking a scheme only when it is directly in front of the
+address and falling back to `protocol_hint` otherwise. JSON gets a separate walk, because
+a payload that keeps the host and the port in different fields has nothing for a
+positional regex to match.
 
 Sources are polled with `If-None-Match`, so an unchanged list costs one 304 and no
 parsing.
