@@ -32,6 +32,13 @@ _ANONYMITY_ALIASES: dict[str, Anonymity] = {
 
 _HOST_PORT = re.compile(r"^(\d{1,3}(?:\.\d{1,3}){3}):(\d{1,5})$")
 
+# Same address, optionally carrying its scheme, found anywhere in the body.
+_ANY_HOST_PORT = re.compile(
+    r"(?:\b(https?|socks[45][ah]?)(?::/{2}|[\s,;|]{1,4}))?"
+    r"\b(\d{1,3}(?:\.\d{1,3}){3})[:\s,;|]{1,3}(\d{2,5})\b",
+    re.I,
+)
+
 
 def normalize_protocol(raw: str | None) -> Protocol | None:
     if not raw:
@@ -100,6 +107,31 @@ def parse_plain(body: str, source: SourceCfg) -> list[Candidate]:
                 host=host_port[0], port=host_port[1], source=source.name, protocol=protocol
             )
         )
+    return out
+
+
+def parse_scan(body: str, source: SourceCfg) -> list[Candidate]:
+    """Pull every `host:port` out of the body regardless of what surrounds it.
+
+    Public lists ship the same data as CSV rows, JSON objects, pipe-delimited tables
+    and `PROTO host:port` pairs. Writing a parser per layout means a new parser every
+    time a source reshuffles its columns, so this one scans instead: a scheme is used
+    when it sits directly in front of the address, otherwise `protocol_hint` applies.
+    """
+    fallback = source.protocol_hint if source.trust_protocol else None
+    out: list[Candidate] = []
+    seen: set[tuple[str, int, str | None]] = set()
+    for scheme, host, port_text in _ANY_HOST_PORT.findall(body):
+        port = int(port_text)
+        if not _valid(host, port):
+            continue
+        protocol = normalize_protocol(scheme) if source.trust_protocol else None
+        protocol = protocol or fallback
+        key = (host, port, protocol)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(Candidate(host=host, port=port, source=source.name, protocol=protocol))
     return out
 
 
@@ -175,6 +207,7 @@ _PARSERS = {
     "plain": parse_plain,
     "geonode": parse_geonode,
     "hideip": parse_hideip,
+    "scan": parse_scan,
 }
 
 

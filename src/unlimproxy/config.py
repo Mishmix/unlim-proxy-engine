@@ -23,7 +23,7 @@ from pydantic_settings import (
 )
 
 Protocol = Literal["http", "socks4", "socks5"]
-ParserName = Literal["prefixed", "plain", "geonode", "hideip"]
+ParserName = Literal["prefixed", "plain", "geonode", "hideip", "scan"]
 
 DEFAULT_CONFIG_PATH = Path(os.getenv("UNLIMPROXY_CONFIG", "config.toml"))
 
