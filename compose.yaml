@@ -16,7 +16,7 @@ services:
       # Leave empty to keep the API open. Set it to require `X-API-Key`.
       API_KEY: "${API_KEY:-}"
       UNLIMPROXY_APP__LOG_LEVEL: "${LOG_LEVEL:-INFO}"
-      UNLIMPROXY_QUEUES__COLD_CONCURRENCY: "${COLD_CONCURRENCY:-400}"
+      UNLIMPROXY_QUEUES__COLD_CONCURRENCY: "${COLD_CONCURRENCY:-1000}"
     ulimits:
       nofile:
         soft: 65535

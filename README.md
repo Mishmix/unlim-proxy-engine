@@ -48,28 +48,38 @@ HTTP, keeping whichever one works.
 
 ## Expect a few hundred proxies, not thousands
 
-Honest numbers, so nothing here surprises you later:
+Honest numbers, measured on one machine rather than quoted from the source lists:
 
 ```
-~150 000 unique host:port from 30 sources
-      ↓  liveness check, ~6–8 % pass
-   ~5 000 – 8 000 alive
-      ↓  Google check, ~21 % pass
-   ~1 000 – 1 700 google-clean at any instant
-      ↓  half-life of a clean proxy: about 5 minutes
-   ~200 – 800 simultaneously usable, with continuous re-checking
+  ~680 000 host:port:protocol rows from 84 sources
+  ~590 000 distinct endpoints behind them
+      ↓  liveness check, ~0.25 % of a full sweep pass
+    ~1 700 alive discovered per full pass
+      ↓  half-life of a live proxy: about 5 minutes
 ```
 
-"Unlimited" here means rotation, not volume. A few hundred Google-capable proxies are
-alive at once and each one lives for minutes. That is fine for low-rate scraping. For
+Volume of candidates is not the constraint — lifetime is. The pool settles at
+
+```
+steady-state pool ≈ discovery rate (alive/sec) × average lifetime (sec)
+```
+
+and on the host these numbers came from that was 0.28 alive/s × ~420 s ≈ **120 alive at
+any instant**, of which roughly a fifth pass the Google check. Adding sources moves the
+first line and barely moves the last one; raising `cold_concurrency` moves the discovery
+rate directly, which is why it is the setting to tune. That host is behind consumer NAT
+and is the floor, not the ceiling — see the concurrency section.
+
+"Unlimited" here means rotation, not volume. That is fine for low-rate scraping. For
 hundreds of requests per second, free proxies will not carry the load.
 
 This is why every response carries `last_verified_at` and `age_sec`, and why the default
 `max_age_sec` is 300. Anything older is not worth handing out.
 
-A full pass over all candidates takes roughly an hour, so the pool keeps growing for the
-first hour after a cold start. The queues are prioritised, though — SOCKS5 first, best
-sources first — so useful proxies appear within the first minutes.
+A full pass over every candidate takes about 1.7 hours at 112 checks/s, so the pool keeps
+growing for the first hours after a cold start. The cold queue is prioritised, though —
+SOCKS5 first, and each source's share of the queue set by its measured hit rate — so
+useful proxies appear within the first minutes.
 
 ---
 
