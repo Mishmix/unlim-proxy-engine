@@ -140,3 +140,81 @@ async def test_prune_removes_only_hopeless_proxies(storage):
     assert await storage.prune(fail_streak_delete=10, stale_unseen_days=7) == 1
     remaining = await storage._rows("SELECT id FROM proxies")
     assert [r["id"] for r in remaining] == [keep]
+
+
+# ─── batched writes and the added columns ──────────────────────────────────
+
+
+async def test_record_l1_many_applies_both_outcomes_in_one_pass(storage):
+    await storage.upsert_candidates(
+        [Candidate("203.0.113.5", 1080, "s", "socks5"), Candidate("203.0.113.6", 1080, "s", "http")]
+    )
+    rows = await storage._rows("SELECT id FROM proxies ORDER BY id")
+    good, bad = rows[0]["id"], rows[1]["id"]
+    await storage.record_l1_many(
+        [(good, True, 700, "1", 1.0, 80.0), (bad, False, None, "0", 0.0, 0.0)]
+    )
+    await storage.commit()
+
+    state = {
+        r["id"]: r
+        for r in await storage._rows(
+            "SELECT id, alive, latency_ms, fail_streak, checks_ok, last_verified_at FROM proxies"
+        )
+    }
+    good_row = state[good]
+    assert (good_row["alive"], good_row["latency_ms"], good_row["checks_ok"]) == (1, 700, 1)
+    assert state[good]["last_verified_at"] is not None
+    assert (state[bad]["alive"], state[bad]["fail_streak"]) == (0, 1)
+    assert state[bad]["last_verified_at"] is None
+
+
+async def test_record_l1_many_tolerates_an_empty_batch(storage):
+    await storage.record_l1_many([])
+
+
+async def test_youtube_verdict_round_trips(storage):
+    proxy_id = await one_proxy(storage)
+    await storage.record_l1(proxy_id, True, 500, "1", 1.0, 70.0)
+    await storage.record_yt(proxy_id, True, False)
+    await storage.commit()
+    row = (await storage._rows("SELECT * FROM proxies"))[0]
+    assert (row["parser_clean"], row["aiohttp_clean"], row["dual_clean"]) == (1, 0, 0)
+
+    due = await storage.fetch_yt_due(10, "2099-01-01T00:00:00Z")
+    assert [p.id for p in due] == [proxy_id]
+    assert not await storage.fetch_yt_due(10, "2000-01-01T00:00:00Z")
+
+
+async def test_open_adds_columns_to_a_database_created_before_they_existed(tmp_path):
+    """`CREATE TABLE IF NOT EXISTS` is a no-op on an existing file, so an upgrade has
+    to reach the new columns through ALTER TABLE or every query naming them fails.
+
+    The pre-upgrade file is produced by taking a current one and removing exactly the
+    columns the upgrade adds, which keeps the fixture honest as more get added.
+    """
+    from unlimproxy.storage import _ADDED_COLUMNS
+
+    path = tmp_path / "old.db"
+    store = Storage(path)
+    await store.open()
+    try:
+        await store.upsert_candidates([Candidate("203.0.113.9", 80, "s", "http")])
+        # An index over a dropped column blocks the drop, exactly as it would have
+        # been absent from the older schema.
+        await store.db.execute("DROP INDEX IF EXISTS idx_proxies_yt")
+        for column in _ADDED_COLUMNS:
+            await store.db.execute(f"ALTER TABLE proxies DROP COLUMN {column}")
+        await store.commit()
+    finally:
+        await store.close()
+
+    reopened = Storage(path)
+    await reopened.open()
+    try:
+        row = (await reopened._rows("SELECT * FROM proxies"))[0]
+        assert row["parser_clean"] == 0
+        assert row["last_yt_at"] is None
+        assert await reopened.fetch_yt_due(5, "2099-01-01T00:00:00Z") == []
+    finally:
+        await reopened.close()

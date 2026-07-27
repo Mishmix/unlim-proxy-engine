@@ -159,3 +159,64 @@ def test_normalize_protocol():
     assert normalize_protocol("https") == "http"
     assert normalize_protocol("ftp") is None
     assert normalize_protocol(None) is None
+
+
+# ─── scan: layout-agnostic extraction ──────────────────────────────────────
+
+
+def scan_source(**kwargs) -> SourceCfg:
+    return SourceCfg(name="s", url="u", parser="scan", **kwargs)
+
+
+def test_scan_reads_a_csv_row_and_takes_the_leading_scheme():
+    body = "protocol,proxy,country\nsocks5,1.2.3.4:1080,DE\nhttp,5.6.7.8:8080,US\n"
+    got = parse(scan_source(trust_protocol=True), body)
+    assert [(c.host, c.port, c.protocol) for c in got] == [
+        ("1.2.3.4", 1080, "socks5"),
+        ("5.6.7.8", 8080, "http"),
+    ]
+
+
+def test_scan_reads_json_objects():
+    body = '[{"ip": "9.9.9.9", "port": "3128", "protocols": ["http"]}]'
+    got = parse(scan_source(protocol_hint="http", trust_protocol=True), body)
+    assert [(c.host, c.port, c.protocol) for c in got] == [("9.9.9.9", 3128, "http")]
+
+
+def test_scan_reads_a_pipe_delimited_table():
+    body = "1.2.3.4:1080 | SOCKS5 | DE | elite\n5.6.7.8:4145 | SOCKS4 | US | anonymous\n"
+    got = parse(scan_source(protocol_hint="socks5", trust_protocol=True), body)
+    assert [(c.host, c.port) for c in got] == [("1.2.3.4", 1080), ("5.6.7.8", 4145)]
+
+
+def test_scan_falls_back_to_the_hint_when_no_scheme_is_present():
+    got = parse(scan_source(protocol_hint="socks4", trust_protocol=True), "1.2.3.4:1080\n")
+    assert got[0].protocol == "socks4"
+
+
+def test_scan_ignores_labels_when_the_protocol_is_not_trusted():
+    got = parse(scan_source(protocol_hint="http", trust_protocol=False), "socks5://1.2.3.4:1080")
+    assert got[0].protocol is None
+
+
+def test_scan_drops_invalid_addresses():
+    body = "0.0.0.0:80\n127.0.0.1:8080\n10.0.0.1:3128\n999.1.1.1:80\n8.8.8.8:0\n8.8.8.8:3128\n"
+    got = parse(scan_source(), body)
+    assert [(c.host, c.port) for c in got] == [("8.8.8.8", 3128)]
+
+
+def test_scan_deduplicates_within_one_body():
+    got = parse(scan_source(protocol_hint="http", trust_protocol=True), "1.2.3.4:80\n1.2.3.4:80\n")
+    assert len(got) == 1
+
+
+def test_scan_reads_json_that_keeps_host_and_port_apart():
+    body = (
+        '{"data": [{"ip": "9.9.9.9", "port": 3128, "protocols": ["socks5"]},'
+        ' {"host": "8.8.8.8", "port": "1080", "protocol": "http"}]}'
+    )
+    got = parse(scan_source(trust_protocol=True), body)
+    assert [(c.host, c.port, c.protocol) for c in got] == [
+        ("9.9.9.9", 3128, "socks5"),
+        ("8.8.8.8", 1080, "http"),
+    ]

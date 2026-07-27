@@ -52,26 +52,35 @@ class CheckerCfg(BaseModel):
     l1_url: str = "https://www.google.com/generate_204"
     l2_url: str = "https://www.google.com/search"
     connect_timeout_sec: float = 5
+    tcp_probe_timeout_sec: float = 2
     l1_total_timeout_sec: float = 8
     l2_total_timeout_sec: float = 12
     l2_min_interval_sec: int = 600
     l2_ok_min_bytes: int = 20_000
     l2_partial_min_bytes: int = 100
     l2_queries: list[str] = ["weather", "python", "news"]
+    yt_search_url: str = "https://www.youtube.com/results?search_query=test&sp=EgIQAg%3D%3D"
+    yt_channel_url: str = "https://www.youtube.com/@YouTube/about"
+    yt_total_timeout_sec: float = 12
+    yt_ok_min_bytes: int = 10_000
+    yt_min_interval_sec: int = 1800
     anonymity_ip_url: str = "https://api.ipify.org?format=json"
     anonymity_judge_url: str = "http://azenv.net/"
     protocol_probe_order: list[Protocol] = ["socks5", "socks4", "http"]
 
 
 class QueuesCfg(BaseModel):
-    cold_concurrency: int = 400
+    cold_concurrency: int = 1000
     cold_batch: int = 2000
+    cold_window_batches: int = 10
     hot_interval_sec: int = 90
     hot_concurrency: int = 100
     warm_interval_sec: int = 300
     warm_concurrency: int = 200
     l2_interval_sec: int = 60
     l2_concurrency: int = 30
+    yt_interval_sec: int = 120
+    yt_concurrency: int = 20
     quarantine_interval_sec: int = 1800
     quarantine_concurrency: int = 50
     fail_streak_quarantine: int = 3

@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 
 HISTORY_WINDOW = 20
 
-SCHEMA = """
+TABLES = """
 CREATE TABLE IF NOT EXISTS proxies (
   id INTEGER PRIMARY KEY,
   host TEXT NOT NULL, port INTEGER NOT NULL, protocol TEXT NOT NULL,
@@ -47,6 +47,10 @@ CREATE TABLE IF NOT EXISTS proxies (
   uptime_ratio REAL NOT NULL DEFAULT 0,
   geo_done INTEGER NOT NULL DEFAULT 0,
   anonymity_done INTEGER NOT NULL DEFAULT 0,
+  parser_clean INTEGER NOT NULL DEFAULT 0,
+  aiohttp_clean INTEGER NOT NULL DEFAULT 0,
+  dual_clean INTEGER NOT NULL DEFAULT 0,
+  last_yt_at TEXT,
   UNIQUE(host, port, protocol)
 );
 
@@ -67,12 +71,27 @@ CREATE TABLE IF NOT EXISTS checks (
   ok INTEGER NOT NULL
 );
 
+"""
+
+# Kept apart from the tables: an index over a column that only `_migrate` adds cannot
+# be created until that migration has run.
+INDEXES = """
 CREATE INDEX IF NOT EXISTS idx_proxies_cold
   ON proxies(last_check_at) WHERE last_check_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_proxies_alive ON proxies(alive, fail_streak, last_check_at);
 CREATE INDEX IF NOT EXISTS idx_proxies_l2 ON proxies(alive, last_l2_at);
+CREATE INDEX IF NOT EXISTS idx_proxies_yt ON proxies(alive, last_yt_at);
 CREATE INDEX IF NOT EXISTS idx_checks_at ON checks(at);
 """
+
+# `CREATE TABLE IF NOT EXISTS` does nothing to a database that already exists, so
+# every column added after the first release has to be introduced here as well.
+_ADDED_COLUMNS = {
+    "parser_clean": "INTEGER NOT NULL DEFAULT 0",
+    "aiohttp_clean": "INTEGER NOT NULL DEFAULT 0",
+    "dual_clean": "INTEGER NOT NULL DEFAULT 0",
+    "last_yt_at": "TEXT",
+}
 
 _UPSERT = """
 INSERT INTO proxies (host, port, protocol, source, first_seen_at, last_seen_in_source_at,
@@ -124,8 +143,18 @@ class Storage:
         await self._db.execute("PRAGMA synchronous=NORMAL")
         await self._db.execute("PRAGMA busy_timeout=30000")
         await self._db.execute("PRAGMA temp_store=MEMORY")
-        await self._db.executescript(SCHEMA)
+        await self._db.executescript(TABLES)
+        await self._migrate()
+        await self._db.executescript(INDEXES)
         await self._db.commit()
+
+    async def _migrate(self) -> None:
+        rows = await self._rows("PRAGMA table_info(proxies)")
+        present = {row["name"] for row in rows}
+        for column, spec in _ADDED_COLUMNS.items():
+            if column not in present:
+                await self.db.execute(f"ALTER TABLE proxies ADD COLUMN {column} {spec}")
+                log.info("added column", extra={"column": column})
 
     async def close(self) -> None:
         if self._db is not None:
@@ -195,29 +224,67 @@ class Storage:
         uptime_ratio: float,
         score: float,
     ) -> None:
+        await self.record_l1_many([(proxy_id, ok, latency_ms, history, uptime_ratio, score)])
+
+    async def record_l1_many(self, results: Sequence[tuple]) -> None:
+        """One round trip per outcome instead of one per proxy.
+
+        A cold sweep applies thousands of these at a time and aiosqlite charges a
+        thread hand-off for every statement, so the per-row cost is the transport,
+        not the SQL. Entries are `(proxy_id, ok, latency_ms, history, uptime_ratio,
+        score)`.
+
+        `google_clean` is deliberately left alone on failure: it records the last L2
+        verdict, and a proxy is only re-tested every ten minutes. Clearing it on every
+        failed liveness check would wipe the flag on the first flap — with a five-minute
+        half-life that is nearly every proxy — and nothing could restore it until the L2
+        window reopened. Freshness is carried by `last_verified_at`.
+        """
+        if not results:
+            return
         now = utcnow()
-        if ok:
-            await self.db.execute(
+        ok_rows = [
+            (r[2], now, now, r[3], r[4], r[5], r[0]) for r in results if r[1]
+        ]
+        fail_rows = [(now, r[3], r[4], r[5], r[0]) for r in results if not r[1]]
+        if ok_rows:
+            await self.db.executemany(
                 """UPDATE proxies SET alive = 1, alive_streak = alive_streak + 1,
                        fail_streak = 0, checks_total = checks_total + 1,
                        checks_ok = checks_ok + 1, latency_ms = ?, last_check_at = ?,
                        last_verified_at = ?, history = ?, uptime_ratio = ?, score = ?
                    WHERE id = ?""",
-                (latency_ms, now, now, history, uptime_ratio, score, proxy_id),
+                ok_rows,
             )
-        else:
-            # `google_clean` is deliberately left alone: it records the last L2 verdict,
-            # and a proxy is only re-tested every 10 minutes. Clearing it on every failed
-            # liveness check would wipe the flag on the first flap — with a five-minute
-            # half-life that is nearly every proxy — and nothing could restore it until
-            # the L2 window reopened. Freshness is carried by `last_verified_at`.
-            await self.db.execute(
+        if fail_rows:
+            await self.db.executemany(
                 """UPDATE proxies SET alive = 0, alive_streak = 0,
                        fail_streak = fail_streak + 1, checks_total = checks_total + 1,
                        last_check_at = ?, history = ?, uptime_ratio = ?, score = ?
                    WHERE id = ?""",
-                (now, history, uptime_ratio, score, proxy_id),
+                fail_rows,
             )
+
+    async def record_yt(self, proxy_id: int, search_ok: bool, channel_ok: bool) -> None:
+        await self.db.execute(
+            """UPDATE proxies SET parser_clean = ?, aiohttp_clean = ?, dual_clean = ?,
+                   last_yt_at = ? WHERE id = ?""",
+            (
+                int(search_ok),
+                int(channel_ok),
+                int(search_ok and channel_ok),
+                utcnow(),
+                proxy_id,
+            ),
+        )
+
+    async def fetch_yt_due(self, limit: int, older_than: str) -> list[Proxy]:
+        return await self._proxies(
+            """SELECT * FROM proxies
+               WHERE alive = 1 AND (last_yt_at IS NULL OR last_yt_at < ?)
+               ORDER BY dual_clean DESC, last_yt_at IS NOT NULL, score DESC LIMIT ?""",
+            (older_than, limit),
+        )
 
     async def record_l2(self, proxy_id: int, status: str, score: float) -> None:
         await self.db.execute(

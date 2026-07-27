@@ -9,10 +9,10 @@ from __future__ import annotations
 import csv
 import io
 import time
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Annotated, Literal
 
-from datetime import datetime, UTC
-from pathlib import Path
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field, StringConstraints
@@ -26,6 +26,12 @@ from .storage import age_sec
 
 Format = Literal["json", "txt", "csv"]
 CountryCode = Annotated[str, StringConstraints(min_length=2, max_length=2, to_upper=True)]
+Target = Literal["parser", "search", "aiohttp", "youtube"]
+TARGET_HELP = (
+    "Restrict to proxies that passed the YouTube probe: `parser`/`search` for the "
+    "search results page, `aiohttp` for direct channel HTML, `youtube` for both. "
+    "A proxy that has not been probed yet does not match."
+)
 
 CSV_COLUMNS = (
     "proxy",
@@ -40,6 +46,9 @@ CSV_COLUMNS = (
     "anonymity",
     "latency_ms",
     "google_clean",
+    "parser_clean",
+    "aiohttp_clean",
+    "dual_clean",
     "score",
     "uptime_ratio",
     "last_verified_at",
@@ -49,7 +58,7 @@ CSV_COLUMNS = (
 
 class Filters(BaseModel):
     limit: int = 20
-    target: str | None = None
+    target: Target | None = None
     protocol: list[str] = []
     country: list[str] = []
     exclude_country: list[str] = []
@@ -69,7 +78,7 @@ class ReportBody(BaseModel):
 
 def filters(
     limit: Annotated[int, Query(ge=1, le=100000)] = 20,
-    target: str | None = Query(None),
+    target: Annotated[Target | None, Query(description=TARGET_HELP)] = None,
     protocol: Annotated[list[Literal["http", "socks4", "socks5"]] | None, Query()] = None,
     country: Annotated[list[CountryCode] | None, Query()] = None,
     exclude_country: Annotated[list[CountryCode] | None, Query()] = None,
@@ -96,9 +105,11 @@ def filters(
 
 
 def matches(proxy: Proxy, f: Filters) -> bool:
-    if f.target in ("parser", "search") and getattr(proxy, "parser_clean", 1) == 0:
+    if f.target in ("parser", "search") and not proxy.parser_clean:
         return False
-    if f.target == "aiohttp" and getattr(proxy, "aiohttp_clean", 1) == 0:
+    if f.target == "aiohttp" and not proxy.aiohttp_clean:
+        return False
+    if f.target == "youtube" and not proxy.dual_clean:
         return False
     if f.google_clean and not proxy.google_clean:
         return False
@@ -146,9 +157,9 @@ def serialize(proxy: Proxy) -> dict:
         "anonymity": proxy.anonymity,
         "latency_ms": proxy.latency_ms,
         "google_clean": bool(proxy.google_clean),
-        "parser_clean": bool(getattr(proxy, "parser_clean", 1)),
-        "aiohttp_clean": bool(getattr(proxy, "aiohttp_clean", 1)),
-        "dual_clean": bool(getattr(proxy, "dual_clean", 1)),
+        "parser_clean": bool(proxy.parser_clean),
+        "aiohttp_clean": bool(proxy.aiohttp_clean),
+        "dual_clean": bool(proxy.dual_clean),
         "score": proxy.score,
         "uptime_ratio": round(proxy.uptime_ratio, 2),
         "last_verified_at": proxy.last_verified_at,
@@ -179,7 +190,7 @@ def create_app(settings: Settings, scheduler: Scheduler) -> FastAPI:
 
     app.state.api_logs = []
 
-    allowed_keys = set(k.strip() for k in (settings.api_key or "").split(",") if k.strip())
+    allowed_keys = {k.strip() for k in (settings.api_key or "").split(",") if k.strip()}
 
     @app.middleware("http")
     async def log_requests(request: Request, call_next):

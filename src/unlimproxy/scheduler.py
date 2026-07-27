@@ -43,6 +43,7 @@ class Scheduler:
         self._tasks: list[asyncio.Task] = []
         self._db_lock = asyncio.Lock()
         self._recently_served: dict[int, float] = {}
+        self._cold_buffer: list[Proxy] = []
 
     # ─── lifecycle ─────────────────────────────────────────────────────────
 
@@ -58,6 +59,7 @@ class Scheduler:
             ("hot", self._hot_once, self.settings.queues.hot_interval_sec),
             ("warm", self._warm_once, self.settings.queues.warm_interval_sec),
             ("l2", self._l2_once, self.settings.queues.l2_interval_sec),
+            ("youtube", self._yt_once, self.settings.queues.yt_interval_sec),
             ("quarantine", self._quarantine_once, self.settings.queues.quarantine_interval_sec),
             ("enrich", self._enrich_once, 20),
             ("maintenance", self._maintenance_once, 600),
@@ -99,17 +101,32 @@ class Scheduler:
     # ─── check queues ──────────────────────────────────────────────────────
 
     async def _cold_once(self) -> None:
-        """New candidates, SOCKS5 first, best sources first (RESEARCH 1.2 and 1.4)."""
-        stats = await self.storage.load_sources()
-        priorities = {s.name: s.priority for s in self.settings.enabled_sources}
-        weights = {
-            name: cold_queue_weight(stats.get(name), priorities.get(name, 3))
-            for name in priorities
-        }
-        async with self._db_lock:
-            batch = await self.storage.fetch_cold(self.settings.queues.cold_batch, weights)
+        """New candidates, SOCKS5 first, best sources first (RESEARCH 1.2 and 1.4).
+
+        The ordering cannot be satisfied by an index — the source ranking is recomputed
+        from live hit rates — so SQLite sorts every unchecked row to answer it, which at
+        a 600 000-row backlog costs a few hundred milliseconds while holding the lock
+        every other queue needs. Once per window instead of once per second is the same
+        ordering for a tenth of the work.
+        """
+        if not self._cold_buffer:
+            stats = await self.storage.load_sources()
+            priorities = {s.name: s.priority for s in self.settings.enabled_sources}
+            weights = {
+                name: cold_queue_weight(stats.get(name), priorities.get(name, 3))
+                for name in priorities
+            }
+            window = self.settings.queues.cold_batch * self.settings.queues.cold_window_batches
+            async with self._db_lock:
+                self._cold_buffer = await self.storage.fetch_cold(window, weights)
+        batch, self._cold_buffer = (
+            self._cold_buffer[: self.settings.queues.cold_batch],
+            self._cold_buffer[self.settings.queues.cold_batch :],
+        )
         if batch:
-            await self._run_l1(batch, self.settings.queues.cold_concurrency, "cold")
+            await self._run_l1(
+                batch, self.settings.queues.cold_concurrency, "cold", prefilter=True
+            )
 
     async def _hot_once(self) -> None:
         async with self._db_lock:
@@ -165,24 +182,60 @@ class Scheduler:
         log.info("l2 sweep", extra={"checked": len(batch), "search_ok": clean})
         await self.rebuild_pool()
 
-    async def _run_l1(self, batch: Sequence[Proxy], concurrency: int, queue: str) -> None:
+    async def _yt_once(self) -> None:
+        """Whether a live proxy can actually load YouTube, which is what the
+        `target=` filter promises. Two page loads per proxy, so it stays on the hot
+        pool only and each proxy is re-tested at most every `yt_min_interval_sec`."""
+        async with self._db_lock:
+            batch = await self.storage.fetch_yt_due(
+                self.settings.queues.yt_concurrency * 6,
+                _ago(self.settings.checker.yt_min_interval_sec),
+            )
+        if not batch:
+            return
+        results = await gather_limited(
+            [self.checker.check_youtube(p.host, p.port, p.protocol) for p in batch],
+            self.settings.queues.yt_concurrency,
+        )
+        both = 0
+        async with self._db_lock:
+            for proxy, result in zip(batch, results, strict=True):
+                if isinstance(result, BaseException):
+                    continue
+                search_ok, channel_ok = result
+                proxy.parser_clean = int(search_ok)
+                proxy.aiohttp_clean = int(channel_ok)
+                proxy.dual_clean = int(search_ok and channel_ok)
+                both += proxy.dual_clean
+                await self.storage.record_yt(proxy.id, search_ok, channel_ok)
+            await self.storage.commit()
+        log.info("youtube sweep", extra={"checked": len(batch), "dual_clean": both})
+
+    async def _run_l1(
+        self, batch: Sequence[Proxy], concurrency: int, queue: str, prefilter: bool = False
+    ) -> None:
         started = time.monotonic()
         results = await gather_limited(
             [
                 self.checker.check_l1(
-                    p.host, p.port, None if p.protocol == "unknown" else p.protocol
+                    p.host,
+                    p.port,
+                    None if p.protocol == "unknown" else p.protocol,
+                    prefilter=prefilter,
                 )
                 for p in batch
             ],
             concurrency,
         )
         alive = 0
+        updates: list[tuple] = []
         async with self._db_lock:
             for proxy, result in zip(batch, results, strict=True):
                 if isinstance(result, BaseException):
                     result = L1Result(ok=False)
                 alive += result.ok
-                await self._apply_l1(proxy, result)
+                updates.append(await self._apply_l1(proxy, result))
+            await self.storage.record_l1_many(updates)
             await self.storage.record_checks("l1", alive, len(batch))
             await self.storage.commit()
         log.info(
@@ -195,7 +248,8 @@ class Scheduler:
             },
         )
 
-    async def _apply_l1(self, proxy: Proxy, result: L1Result) -> None:
+    async def _apply_l1(self, proxy: Proxy, result: L1Result) -> tuple:
+        """Returns the row `record_l1_many` needs, so a sweep writes in two statements."""
         if result.ok and result.protocol and result.protocol != proxy.protocol:
             # The handshake, not the source's file name, decides the protocol. Resolving
             # may merge this row into an existing one, so keep the surviving id.
@@ -209,9 +263,7 @@ class Scheduler:
         proxy.uptime_ratio = ratio
         if result.ok:
             proxy.latency_ms = result.latency_ms
-        await self.storage.record_l1(
-            proxy.id, result.ok, result.latency_ms, history, ratio, score(proxy, ratio)
-        )
+        return (proxy.id, result.ok, result.latency_ms, history, ratio, score(proxy, ratio))
 
     # ─── enrichment ────────────────────────────────────────────────────────
 

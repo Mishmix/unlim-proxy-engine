@@ -83,7 +83,9 @@ def test_limit(client):
     assert client.get("/v1/proxies?limit=2").json()["count"] == 2
 
 
-@pytest.mark.parametrize(("limit", "status"), [(0, 422), (1, 200), (500, 200), (501, 422)])
+@pytest.mark.parametrize(
+    ("limit", "status"), [(0, 422), (1, 200), (100_000, 200), (100_001, 422)]
+)
 def test_limit_bounds(client, limit, status):
     assert client.get(f"/v1/proxies?limit={limit}").status_code == status
 
@@ -190,12 +192,45 @@ def test_single_proxy_shape(client):
         "anonymity",
         "latency_ms",
         "google_clean",
+        "parser_clean",
+        "aiohttp_clean",
+        "dual_clean",
         "score",
         "uptime_ratio",
         "last_verified_at",
         "age_sec",
     }
     assert body["proxy"] == f"{body['protocol']}://{body['host']}:{body['port']}"
+
+
+# ─── ?target= (YouTube reachability) ───────────────────────────────────────
+
+
+def test_target_only_matches_probed_proxies(client):
+    """An unprobed proxy must not pass as YouTube-clean — the columns default to 0."""
+    assert client.get("/v1/proxies?target=youtube").json()["count"] == 0
+    assert client.get("/v1/proxies?target=parser").json()["count"] == 0
+    assert client.get("/v1/proxies?target=aiohttp").json()["count"] == 0
+
+
+def test_target_filters_on_the_matching_column(client):
+    # The stale entry is excluded by max_age_sec whatever its YouTube columns say.
+    fresh = [p for p in client.app.state.scheduler.pool if p.last_verified_at != ago(3600)]
+    searcher, fetcher, both_ok = fresh[0], fresh[1], fresh[2]
+    searcher.parser_clean = 1
+    fetcher.aiohttp_clean = 1
+    both_ok.parser_clean = both_ok.aiohttp_clean = both_ok.dual_clean = 1
+
+    search = client.get("/v1/proxies?target=search").json()
+    assert {p["proxy"] for p in search["proxies"]} == {searcher.url, both_ok.url}
+    aiohttp_only = client.get("/v1/proxies?target=aiohttp").json()
+    assert {p["proxy"] for p in aiohttp_only["proxies"]} == {fetcher.url, both_ok.url}
+    both = client.get("/v1/proxies?target=youtube").json()
+    assert {p["proxy"] for p in both["proxies"]} == {both_ok.url}
+
+
+def test_unknown_target_is_rejected(client):
+    assert client.get("/v1/proxies?target=tiktok").status_code == 422
 
 
 def test_two_consecutive_calls_rotate(client):

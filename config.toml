@@ -23,6 +23,7 @@ user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTM
 l1_url = "https://www.google.com/generate_204"
 l2_url = "https://www.google.com/search"
 connect_timeout_sec = 5
+tcp_probe_timeout_sec = 2   # raw TCP pre-probe only; 94 % of live proxies answer inside it
 l1_total_timeout_sec = 8
 l2_total_timeout_sec = 12
 l2_min_interval_sec = 600   # never L2-check the same proxy more often than this
@@ -32,20 +33,34 @@ l2_queries = [
     "weather", "recipe", "python", "news", "dictionary", "map", "train",
     "coffee", "guitar", "library", "bicycle", "garden", "museum", "sunset",
 ]
+yt_search_url = "https://www.youtube.com/results?search_query=test&sp=EgIQAg%3D%3D"
+yt_channel_url = "https://www.youtube.com/@YouTube/about"
+yt_total_timeout_sec = 12
+yt_ok_min_bytes = 10000
+yt_min_interval_sec = 1800  # never re-probe YouTube for the same proxy more often
 anonymity_ip_url = "https://api.ipify.org?format=json"
 anonymity_judge_url = "http://azenv.net/"
 protocol_probe_order = ["socks5", "socks4", "http"]
 
 [queues]
 # Interval = how often the queue is swept. Concurrency = simultaneous checks.
-cold_concurrency = 400
+# Raising cold_concurrency is the single biggest speed lever. Measured on one host,
+# 6000 dead candidates: 200 -> 81 checks/s, 400 -> 140, 800 -> 198, 1600 -> 268,
+# 3000 -> 297. CPU stayed under 10 % throughout, so the ceiling is the network path,
+# not the process. A crossover run at 400 vs 1600 recovered 53.4 % and 56.0 % of the
+# same live set, so the extra concurrency costs no accuracy — but see the README on
+# consumer NAT, where a table that small collapses the pool instead.
+cold_concurrency = 1000
 cold_batch = 2000
+cold_window_batches = 10    # rows pulled per cold query, in units of cold_batch
 hot_interval_sec = 90
 hot_concurrency = 100
 warm_interval_sec = 300
 warm_concurrency = 200
 l2_interval_sec = 60      # sweep cadence; each proxy is still gated by checker.l2_min_interval_sec
 l2_concurrency = 30
+yt_interval_sec = 120     # backs the ?target= filter; gated by checker.yt_min_interval_sec
+yt_concurrency = 20
 quarantine_interval_sec = 1800
 quarantine_concurrency = 50
 fail_streak_quarantine = 3
@@ -593,3 +608,168 @@ trust_protocol = false
 priority = 3
 
 
+
+# ─── Bulk aggregate dumps ────────────────────────────────────────────────────
+#
+# Measured incremental yield against everything above, 2026-07-27: these carry the
+# pool from 138 873 to roughly 585 000 distinct endpoints. They are unvalidated
+# scrapes, so their hit rate is far below the curated lists and they all sit at
+# priority 4 — the cold queue drains them last, and `cold_queue_weight` demotes them
+# further on measured hit rate once a source has 1000 checked candidates.
+#
+# Sources that only relabel addresses we already hold under a different protocol were
+# rejected on purpose. ProxRipper's socks5 dump, for one, adds 202 new endpoints and
+# 146 783 new rows; that is three times the check load for the same machines.
+
+[[sources]]
+name = "worldpool_hijacked"          # +152 465 endpoints
+url = "https://raw.githubusercontent.com/CelestialBrain/worldpool/main/proxies/hijacked.txt"
+parser = "scan"
+trust_protocol = false
+priority = 4
+
+[[sources]]
+name = "akbarali_mixed"              # +128 606; the repo's http/socks4/socks5 files are byte-identical
+url = "https://raw.githubusercontent.com/akbarali123A/proxy_scraper/main/http_proxies.txt"
+parser = "scan"
+trust_protocol = false
+priority = 4
+
+[[sources]]
+name = "limingda_csv"                # +99 929; CSV rows, protocol in column 1
+url = "https://raw.githubusercontent.com/LiMingda-101212/Proxy-Pool-Actions/main/proxies.csv"
+parser = "scan"
+trust_protocol = true
+priority = 4
+
+[[sources]]
+name = "tsprnay_all"                 # +17 839; only the `sorted/` tree is still updated
+url = "https://raw.githubusercontent.com/Tsprnay/Proxy-lists/master/proxies/sorted/all.txt"
+parser = "scan"
+trust_protocol = false
+priority = 4
+
+[[sources]]
+name = "lalifeier_https"             # +15 927
+url = "https://raw.githubusercontent.com/lalifeier/proxy-scraper/main/proxies/raw/https.txt"
+parser = "scan"
+protocol_hint = "http"
+trust_protocol = true
+priority = 3
+
+[[sources]]
+name = "lalifeier_socks5"            # +9 333
+url = "https://raw.githubusercontent.com/lalifeier/proxy-scraper/main/proxies/raw/socks5.txt"
+parser = "scan"
+protocol_hint = "socks5"
+trust_protocol = true
+priority = 3
+
+[[sources]]
+name = "lalifeier_http"              # +4 176
+url = "https://raw.githubusercontent.com/lalifeier/proxy-scraper/main/proxies/raw/http.txt"
+parser = "scan"
+protocol_hint = "http"
+trust_protocol = true
+priority = 3
+
+[[sources]]
+name = "cheagjihvg_http"             # +4 174
+url = "https://raw.githubusercontent.com/Cheagjihvg/simple-proxylist/main/http.txt"
+parser = "scan"
+protocol_hint = "http"
+trust_protocol = true
+priority = 3
+
+[[sources]]
+name = "shubham_socks5"              # +3 842
+url = "https://raw.githubusercontent.com/shubhamshendre/Free-Proxies/main/socks5.txt"
+parser = "scan"
+protocol_hint = "socks5"
+trust_protocol = true
+priority = 3
+
+[[sources]]
+name = "lalifeier_socks4"            # +3 429
+url = "https://raw.githubusercontent.com/lalifeier/proxy-scraper/main/proxies/raw/socks4.txt"
+parser = "scan"
+protocol_hint = "socks4"
+trust_protocol = true
+priority = 3
+
+[[sources]]
+name = "xyzs996_all"                 # +3 150
+url = "https://raw.githubusercontent.com/xyzs996/free-proxy-health-list/main/all.txt"
+parser = "scan"
+trust_protocol = false
+priority = 4
+
+[[sources]]
+name = "hproxy_all"                  # +3 025
+url = "https://raw.githubusercontent.com/hproxy-com/free-proxy-list/main/all.txt"
+parser = "scan"
+trust_protocol = false
+priority = 4
+
+[[sources]]
+name = "anutmagang_elite"            # +1 714; pipe-delimited, pre-filtered to elite
+url = "https://raw.githubusercontent.com/anutmagang/Free-HighQuality-Proxy-Socks/main/results/hunted/hunted_elite.txt"
+parser = "scan"
+trust_protocol = true
+priority = 2
+
+# ─── Non-GitHub endpoints ────────────────────────────────────────────────────
+# Smaller but curated, so they earn a better priority than the bulk dumps above.
+
+[[sources]]
+name = "databay_txt"
+url = "https://databay.com/free-proxy-list.txt"
+parser = "scan"
+trust_protocol = false
+priority = 2
+
+[[sources]]
+name = "proxyfreeonly"
+url = "https://proxyfreeonly.com/api/free-proxy-list"
+parser = "scan"
+trust_protocol = true
+priority = 2
+
+[[sources]]
+name = "openproxylist_socks4"
+url = "https://api.openproxylist.xyz/socks4.txt"
+parser = "scan"
+protocol_hint = "socks4"
+trust_protocol = true
+priority = 2
+
+[[sources]]
+name = "openproxylist_socks5"
+url = "https://api.openproxylist.xyz/socks5.txt"
+parser = "scan"
+protocol_hint = "socks5"
+trust_protocol = true
+priority = 2
+
+[[sources]]
+name = "proxyspace_socks4"
+url = "https://proxyspace.pro/socks4.txt"
+parser = "scan"
+protocol_hint = "socks4"
+trust_protocol = true
+priority = 2
+
+[[sources]]
+name = "spys_me_http"
+url = "https://spys.me/proxy.txt"
+parser = "scan"
+protocol_hint = "http"
+trust_protocol = true
+priority = 2
+
+[[sources]]
+name = "spys_me_socks"
+url = "https://spys.me/socks.txt"
+parser = "scan"
+trust_protocol = false
+priority = 2

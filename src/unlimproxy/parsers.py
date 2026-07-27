@@ -6,6 +6,7 @@ validated and anything unparseable is dropped silently rather than raising.
 
 from __future__ import annotations
 
+import contextlib
 import ipaddress
 import json
 import re
@@ -110,19 +111,55 @@ def parse_plain(body: str, source: SourceCfg) -> list[Candidate]:
     return out
 
 
+_HOST_KEYS = ("ip", "host", "address", "addr", "proxy", "server")
+_PORT_KEYS = ("port",)
+_PROTOCOL_KEYS = ("protocol", "protocols", "type", "scheme")
+
+
+def _walk_json(node: object, out: list[tuple[str | None, str, int]]) -> None:
+    """Collect `(scheme, host, port)` from any nested object carrying both fields."""
+    if isinstance(node, list):
+        for item in node:
+            _walk_json(item, out)
+        return
+    if not isinstance(node, dict):
+        return
+    host = next((node[k] for k in _HOST_KEYS if isinstance(node.get(k), str)), None)
+    port = next((node[k] for k in _PORT_KEYS if k in node), None)
+    if isinstance(host, str) and isinstance(port, str | int):
+        raw = next((node[k] for k in _PROTOCOL_KEYS if k in node), None)
+        if isinstance(raw, list):
+            raw = raw[0] if raw else None
+        with contextlib.suppress(TypeError, ValueError):
+            out.append((raw if isinstance(raw, str) else None, host, int(port)))
+    for value in node.values():
+        if isinstance(value, list | dict):
+            _walk_json(value, out)
+
+
 def parse_scan(body: str, source: SourceCfg) -> list[Candidate]:
     """Pull every `host:port` out of the body regardless of what surrounds it.
 
     Public lists ship the same data as CSV rows, JSON objects, pipe-delimited tables
     and `PROTO host:port` pairs. Writing a parser per layout means a new parser every
-    time a source reshuffles its columns, so this one scans instead: a scheme is used
+    time a source reshuffles its columns, so this one scans instead: a scheme counts
     when it sits directly in front of the address, otherwise `protocol_hint` applies.
+    JSON gets its own pass because a payload that keeps the host and the port in
+    separate fields has nothing for a positional regex to match.
     """
     fallback = source.protocol_hint if source.trust_protocol else None
+    found: list[tuple[str | None, str, int]] = []
+    with contextlib.suppress(json.JSONDecodeError, UnicodeDecodeError, RecursionError):
+        _walk_json(json.loads(body), found)
+    if not found:
+        found = [
+            (scheme or None, host, int(port))
+            for scheme, host, port in _ANY_HOST_PORT.findall(body)
+        ]
+
     out: list[Candidate] = []
     seen: set[tuple[str, int, str | None]] = set()
-    for scheme, host, port_text in _ANY_HOST_PORT.findall(body):
-        port = int(port_text)
+    for scheme, host, port in found:
         if not _valid(host, port):
             continue
         protocol = normalize_protocol(scheme) if source.trust_protocol else None
