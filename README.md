@@ -119,12 +119,13 @@ A filtered list, best score first.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| `limit` | int 1..500 | 20 | how many to return |
+| `limit` | int 1..100000 | 20 | how many to return |
 | `protocol` | `http` \| `socks4` \| `socks5` | all | repeatable: `?protocol=socks5&protocol=socks4` |
 | `country` | ISO-2 | all | repeatable |
 | `exclude_country` | ISO-2 | — | repeatable |
 | `max_latency_ms` | int | 5000 | upper bound |
 | `google_clean` | bool | `false` | `true` returns only proxies that passed the Google check |
+| `target` | `parser` \| `search` \| `aiohttp` \| `youtube` | — | only proxies that passed the YouTube probe (see below) |
 | `anonymity` | `elite` \| `anonymous` \| `transparent` | all | |
 | `asn_type` | `residential` \| `datacenter` | all | |
 | `min_score` | float 0..100 | 0 | |
@@ -140,7 +141,16 @@ curl -s "localhost:8000/v1/proxies?asn_type=residential&anonymity=elite&max_age_
 
 # everything except two countries, as CSV
 curl -s "localhost:8000/v1/proxies?exclude_country=CN&exclude_country=RU&format=csv"
+
+# only proxies that loaded both YouTube pages on their last probe
+curl -s "localhost:8000/v1/proxies?target=youtube&limit=50&format=txt"
 ```
+
+`target` is separate from `google_clean` because loading Google and loading YouTube are
+different tests and a proxy routinely passes one and fails the other. `parser` and
+`search` mean the search results page, `aiohttp` means channel HTML fetched directly,
+`youtube` means both. A proxy that has not been probed yet matches none of them — the
+columns start at 0 and only a completed probe sets them.
 
 ### `POST /v1/report`
 
@@ -330,6 +340,22 @@ This is not a limit of the service. On a Linux VPS the container talks to the ne
 directly and behaves like the native column. For local development on a Mac, run it
 natively (below), or lower the concurrency a lot:
 
+Where the network is not the constraint, concurrency is the one setting that matters.
+Measured on 6000 dead candidates:
+
+| `cold_concurrency` | checks/s | process CPU |
+|---|---|---|
+| 200 | 81 | 10 % |
+| 400 | 140 | 9 % |
+| 800 | 198 | 8 % |
+| 1600 | 268 | 5 % |
+| 3000 | 297 | 4 % |
+
+CPU never became the constraint, which is also why there is no uvloop here — at 4-10 %
+there is nothing for it to reclaim. Accuracy does not pay for the speed either: a
+crossover run over one live set recovered 53.4 % at 400 and 56.0 % at 1600. Raise it as
+far as the host's conntrack table and file descriptor limit allow.
+
 ```bash
 COLD_CONCURRENCY=50 docker compose up -d
 ```
@@ -341,7 +367,7 @@ pip install -e ".[dev]"
 python -m unlimproxy
 ```
 
-Raise the file descriptor limit first — 400 concurrent checks will exhaust the default
+Raise the file descriptor limit first — 1000 concurrent checks will exhaust the default
 1024:
 
 ```bash

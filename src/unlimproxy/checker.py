@@ -163,18 +163,26 @@ class Checker:
     # ─── YouTube ───────────────────────────────────────────────────────────
 
     async def _youtube_page_ok(self, host: str, port: int, protocol: str, url: str) -> bool:
+        """Positive test, not an absence-of-captcha one.
+
+        `CAPTCHA_MARKERS` is tuned for Google Search and cannot be reused here: a
+        healthy YouTube page ships a reCAPTCHA script of its own, so matching on
+        "recaptcha" rejected every single probe. What a real page does carry, and an
+        interstitial or a proxy's own error page does not, is YouTube's bootstrap
+        payload — so that is what gets checked, together with Google's own block page
+        redirect and a size floor.
+        """
         try:
             async with (
                 self._session(host, port, protocol, self.cfg.yt_total_timeout_sec) as session,
                 session.get(url, allow_redirects=True) as response,
             ):
-                if response.status != 200:
+                if response.status != 200 or "/sorry/" in str(response.url):
                     return False
                 body = await response.text(errors="replace")
         except Exception:  # noqa: BLE001 — every proxy failure mode ends here
             return False
-        lowered = body.lower()
-        if any(marker in lowered for marker in CAPTCHA_MARKERS):
+        if self.cfg.yt_required_marker not in body:
             return False
         return len(body.encode("utf-8", errors="ignore")) >= self.cfg.yt_ok_min_bytes
 

@@ -37,6 +37,9 @@ yt_search_url = "https://www.youtube.com/results?search_query=test&sp=EgIQAg%3D%
 yt_channel_url = "https://www.youtube.com/@YouTube/about"
 yt_total_timeout_sec = 12
 yt_ok_min_bytes = 10000
+# A real YouTube page carries this bootstrap payload; an interstitial or a proxy's own
+# error page does not. Matching on "recaptcha" instead rejects every healthy page.
+yt_required_marker = "ytInitialData"
 yt_min_interval_sec = 1800  # never re-probe YouTube for the same proxy more often
 anonymity_ip_url = "https://api.ipify.org?format=json"
 anonymity_judge_url = "http://azenv.net/"

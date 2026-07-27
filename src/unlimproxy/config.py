@@ -63,6 +63,7 @@ class CheckerCfg(BaseModel):
     yt_channel_url: str = "https://www.youtube.com/@YouTube/about"
     yt_total_timeout_sec: float = 12
     yt_ok_min_bytes: int = 10_000
+    yt_required_marker: str = "ytInitialData"
     yt_min_interval_sec: int = 1800
     anonymity_ip_url: str = "https://api.ipify.org?format=json"
     anonymity_judge_url: str = "http://azenv.net/"

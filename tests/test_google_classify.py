@@ -67,3 +67,19 @@ def test_size_is_measured_in_bytes_not_characters():
     """20 000 multi-byte characters are well over 20 000 bytes; 10 000 are not."""
     assert classify_google(200, "中" * 10_000, CFG) == "SEARCH_OK"
     assert classify_google(200, "中" * 500, CFG) == "PARTIAL"
+
+
+# ─── YouTube reachability ──────────────────────────────────────────────────
+
+
+def test_google_captcha_markers_would_reject_a_healthy_youtube_page():
+    """Regression: the YouTube probe reused CAPTCHA_MARKERS, and a healthy YouTube
+    page ships a reCAPTCHA script of its own — so every probe came back negative and
+    `?target=` could never match anything."""
+    from unlimproxy.checker import CAPTCHA_MARKERS
+
+    healthy_youtube = "<html><script src='/recaptcha/api.js'></script>var ytInitialData = {};"
+    assert any(m in healthy_youtube.lower() for m in CAPTCHA_MARKERS)
+
+    cfg = CheckerCfg()
+    assert cfg.yt_required_marker in healthy_youtube

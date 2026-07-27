@@ -257,3 +257,26 @@ async def test_a_source_scored_to_zero_still_gets_occasional_slots(storage):
     sources = [p.source for p in batch]
     assert sources.count("dead") >= 1
     assert sources.count("live") > sources.count("dead") * 4
+
+
+async def test_scraper_keeps_network_out_of_the_database_lock(storage, monkeypatch):
+    """Regression: the whole scrape ran inside the scheduler's database lock, so 84
+    HTTP fetches blocked every check queue for about 25 s out of every 180."""
+    from unlimproxy.config import Settings, SourceCfg
+    from unlimproxy.models import ScrapeResult
+    from unlimproxy.scraper import Scraper
+
+    settings = Settings(
+        sources=[SourceCfg(name="s", url="http://example.invalid/list.txt", parser="scan")],
+        _env_file=None,
+    )
+    scraper = Scraper(settings, storage)
+    sources = settings.enabled_sources
+    result = ScrapeResult(source="s")
+    result.candidates = [Candidate("203.0.113.7", 1080, "s", "socks5")]
+    result.fetched = 1
+
+    stored = await scraper.store(sources, [result])
+    await storage.commit()
+    assert stored[0].new == 1
+    assert await storage.find("203.0.113.7", 1080, "socks5") is not None

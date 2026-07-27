@@ -24,7 +24,10 @@ class Scraper:
         self.storage = storage
         self._semaphore = asyncio.Semaphore(settings.scraper.concurrency)
 
-    async def run_once(self) -> list[ScrapeResult]:
+    async def fetch_all(self) -> tuple[list[SourceCfg], list[ScrapeResult]]:
+        """Network only. Kept apart from `store` so the scheduler does not hold the
+        database lock across 84 HTTP requests — that stalled every check queue for
+        about 25 seconds out of every 180."""
         stats = await self.storage.load_sources()
         sources = sorted(self.settings.enabled_sources, key=lambda s: (s.priority, s.name))
         timeout = aiohttp.ClientTimeout(total=self.settings.scraper.timeout_sec)
@@ -37,6 +40,12 @@ class Scraper:
                     for s in sources
                 )
             )
+        return sources, results
+
+    async def store(
+        self, sources: list[SourceCfg], results: list[ScrapeResult]
+    ) -> list[ScrapeResult]:
+        stats = await self.storage.load_sources()
 
         # Insert in priority order so the best source wins the `source` attribution.
         seen: set[tuple[str, int, str]] = set()

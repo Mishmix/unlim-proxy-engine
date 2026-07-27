@@ -94,8 +94,9 @@ class Scheduler:
     # ─── scraping ──────────────────────────────────────────────────────────
 
     async def _scrape_once(self) -> None:
+        sources, results = await self.scraper.fetch_all()
         async with self._db_lock:
-            await self.scraper.run_once()
+            await self.scraper.store(sources, results)
         self.last_scrape_at = utcnow()
 
     # ─── check queues ──────────────────────────────────────────────────────
