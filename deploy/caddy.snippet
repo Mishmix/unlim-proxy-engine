@@ -1,0 +1,42 @@
+# Копируется на сервер в /opt/platform/caddy/conf.d/unlimproxy.caddy
+# и подхватывается через `docker compose -p platform exec caddy caddy reload`.
+#
+# sslip.io резолвит имя с IP внутри в этот IP, поэтому Let's Encrypt выдаёт
+# настоящий сертификат без своего домена. Заведут поддомен — меняется только
+# строка адреса, Caddy перевыпустит сам.
+
+unlimproxy.62-238-50-62.sslip.io {
+	encode zstd gzip
+
+	# unlimproxy — алиас сервиса в сети edge (EDGE_ALIAS из stack.env).
+	reverse_proxy unlimproxy:8000 {
+		# Пул отвечает списками на тысячи строк; дефолтные таймауты Caddy режут
+		# такие ответы на медленном клиенте.
+		transport http {
+			read_timeout 120s
+			write_timeout 120s
+		}
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	# ВНИМАНИЕ: адрес публичный, а /v1/* закрыт только переменной API_KEY
+	# (api.py:216, require_key). Пустой API_KEY = открытый пул для всего
+	# интернета. На VPS он ОБЯЗАТЕЛЕН.
+	#
+	# /dashboard отдаётся без ключа сознательно — это пустая оболочка, все цифры
+	# в неё приезжают из /v1/*, а те под ключом (комментарий в api.py:242).
+
+	log {
+		output file /data/unlimproxy-access.log {
+			roll_size 20mb
+			roll_keep 3
+		}
+		format json
+	}
+}

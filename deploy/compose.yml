@@ -1,0 +1,101 @@
+# Unlim Proxy на общем сервере /opt/platform.
+#
+# Один процесс: API и все фоновые циклы (scrape / cold / hot / warm / l2 / yt /
+# quarantine / enrich / geo) живут в одном asyncio-loop — см. __main__.build().
+# Разносить нечего, второй контейнер просто начал бы дублировать проверки и
+# писать в ту же SQLite.
+#
+# Базы Postgres у проекта нет: всё состояние — SQLite в /app/data. Поэтому в
+# сеть data сервис не включён, только в edge.
+#
+# Имя стека не задаётся здесь блоком name: — его ставит флаг -p из push.sh.
+
+services:
+  unlimproxy:
+    build:
+      # Берём обычный Dockerfile, а не Dockerfile.railway: они отличаются ровно
+      # одной строкой VOLUME /app/data, которую запрещал Railway. Здесь том
+      # объявлен ниже bind-монтом, и он перекрывает VOLUME — анонимный том не
+      # создаётся. Dockerfile.railway после переезда можно удалить.
+      context: ${STACK_ROOT}/app
+      dockerfile: Dockerfile
+    image: unlimproxy:local
+    restart: unless-stopped
+
+    # Секреты (API_KEY) приезжают ТОЛЬКО отсюда. В блок environment их класть
+    # нельзя: запись вида "${API_KEY:-}" всегда определяет переменную и затирает
+    # значение из env_file пустой строкой — в исходном compose.yaml проекта эта
+    # ловушка стоит заряженной.
+    env_file:
+      - ${STACK_ROOT}/.env
+
+    environment:
+      # Здесь только то, чем рулит стек, а не владелец. Всё перечисленное БЬЁТ
+      # env_file, поэтому список держим коротким.
+      UNLIMPROXY_APP__HOST: "0.0.0.0"
+      UNLIMPROXY_APP__PORT: "8000"
+      UNLIMPROXY_APP__LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+      UNLIMPROXY_QUEUES__COLD_CONCURRENCY: "${COLD_CONCURRENCY:-100}"
+
+    volumes:
+      # 175 МБ proxies.db + WAL + ~215 МБ geo-баз. Каталог ВНЕ app/, чтобы rsync
+      # деплоя физически не мог до него дотянуться.
+      - ${STACK_ROOT}/data:/app/data
+      # Конфиг монтируется поверх запечённого в образ: правка источников или
+      # интервалов доезжает обычным push.sh --no-build, без пересборки.
+      - ${STACK_ROOT}/app/config.toml:/app/config.toml:ro
+
+    # Наружу порт не публикуем: в интернет смотрит только Caddy платформенного
+    # стека, он ходит сюда по сети edge на unlimproxy:8000.
+    expose: ["8000"]
+    # Клиент пула — парсер Lead Engine, он остаётся на сервере #1
+    # (95.216.217.14). Пока приватной сети Hetzner нет, он ходит через публичный
+    # адрес и Caddy. Когда сеть 10.0.0.0/16 поднимут, сюда добавится привязка к
+    # приватному интерфейсу — ИМЕННО с IP в левой части, иначе Docker откроет
+    # порт на всех интерфейсах и мимо Caddy:
+    # ports:
+    #   - "10.x.x.x:8000:8000"
+
+    networks:
+      edge:
+        # Алиас обязателен: сервисы из разных стеков сидят в одной сети edge, и
+        # без явного имени они схлопнутся друг с другом.
+        aliases: ["${EDGE_ALIAS:-unlimproxy}"]
+
+    # 400+ одновременных проверок пробивают дефолтные 1024 дескриптора. Строки
+    # про limits.conf в Dockerfile — украшение: PAM в контейнере не участвует,
+    # реально лимит поднимает именно этот блок.
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+
+    # Единственный CPU-активный сервис переезда. Ровно те же цифры, что автор уже
+    # держал в своём compose.yaml (cpus 0.60 / memory 512M) — сходятся, менять
+    # нечего. memswap_limit = mem_limit означает «своп не давать»: пусть лучше
+    # упадёт заметно, чем тихо уползёт в диск на машине с двумя ядрами.
+    cpus: 0.60
+    mem_limit: 512m
+    memswap_limit: 512m
+
+    # /healthz отдаёт 503, если через 10 минут после старта живых прокси ноль
+    # (api.py:322). Пул поднимается из SQLite в rebuild_pool() до первого
+    # запроса, так что на скопированной базе он зелёный сразу.
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz',timeout=5).status==200 else 1)\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+
+    # Дать циклам дожить и закрыть SQLite штатно: обрыв на записи оставит WAL,
+    # который потом придётся вычитывать при старте.
+    stop_grace_period: 30s
+
+    logging:
+      driver: json-file
+      options: {max-size: "20m", max-file: "3"}
+
+networks:
+  edge:
+    external: true
