@@ -54,6 +54,12 @@ class CheckerCfg(BaseModel):
     connect_timeout_sec: float = 5
     tcp_probe_timeout_sec: float = 2
     max_inflight: int = 250
+    # Page loads take a slice of `max_inflight`, never the whole thing. A YouTube
+    # probe moves ~64 KB through a proxy that manages tens of KB/s, so it holds its
+    # slot for seconds; sharing one pool with the L1 probes let a single sweep park
+    # every slot and the liveness checks timed out behind it.
+    max_inflight_heavy: int = 20
+    max_body_bytes: int = 65_536
     l1_total_timeout_sec: float = 8
     l2_total_timeout_sec: float = 12
     l2_min_interval_sec: int = 600
@@ -61,10 +67,14 @@ class CheckerCfg(BaseModel):
     l2_partial_min_bytes: int = 100
     l2_queries: list[str] = ["weather", "python", "news"]
     yt_search_url: str = "https://www.youtube.com/results?search_query=test&sp=EgIQAg%3D%3D"
-    yt_channel_url: str = "https://www.youtube.com/@YouTube/about"
+    yt_watch_url: str = "https://www.youtube.com/watch?v=jNQXAC9IVRw"
     yt_total_timeout_sec: float = 12
     yt_ok_min_bytes: int = 10_000
-    yt_required_marker: str = "ytInitialData"
+    # `ytInitialData` sits at byte 743 167 of the search page, so testing for it meant
+    # pulling the whole 897 KB. `ytcfg.set` is the same kind of evidence — YouTube's
+    # own bootstrap, absent from interstitials and from a proxy's error page — and it
+    # lands at byte 1 852, comfortably inside `max_body_bytes`.
+    yt_required_marker: str = "ytcfg.set"
     yt_min_interval_sec: int = 1800
     anonymity_ip_url: str = "https://api.ipify.org?format=json"
     anonymity_judge_url: str = "http://azenv.net/"

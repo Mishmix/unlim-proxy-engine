@@ -91,6 +91,12 @@ class Checker:
         self.cfg = cfg
         self.own_ip: str | None = None
         self._gate = asyncio.Semaphore(cfg.max_inflight)
+        # Page loads take a sub-budget of the gate above rather than a budget of their
+        # own, so they can never hold more than `max_inflight_heavy` of the total and
+        # liveness always has the rest. A YouTube probe pulls hundreds of kilobytes
+        # through a proxy that manages tens of kilobytes a second; sharing one pool
+        # with L1 meant those transfers held every slot while L1 timed out behind them.
+        self._heavy = asyncio.Semaphore(cfg.max_inflight_heavy)
 
     async def detect_own_ip(self) -> str | None:
         """One direct request at startup; the anonymity check compares against it."""
@@ -172,11 +178,12 @@ class Checker:
         url = f"{self.cfg.l2_url}?{urlencode({'q': query})}"
         try:
             async with (
+                self._heavy,
                 self._gate,
                 self._session(host, port, protocol, self.cfg.l2_total_timeout_sec) as session,
                 session.get(url, allow_redirects=True) as response,
             ):
-                body = await response.text(errors="replace")
+                body = await self._read_capped(response)
                 status: int | None = response.status
                 if "/sorry/" in str(response.url):
                     return L2Result("CAPTCHA", len(body))
@@ -198,13 +205,14 @@ class Checker:
         """
         try:
             async with (
+                self._heavy,
                 self._gate,
                 self._session(host, port, protocol, self.cfg.yt_total_timeout_sec) as session,
                 session.get(url, allow_redirects=True) as response,
             ):
                 if response.status != 200 or "/sorry/" in str(response.url):
                     return False
-                body = await response.text(errors="replace")
+                body = await self._read_capped(response)
         except Exception:  # noqa: BLE001 — every proxy failure mode ends here
             return False
         if self.cfg.yt_required_marker not in body:
@@ -212,15 +220,21 @@ class Checker:
         return len(body.encode("utf-8", errors="ignore")) >= self.cfg.yt_ok_min_bytes
 
     async def check_youtube(self, host: str, port: int, protocol: str) -> tuple[bool, bool]:
-        """`(search_ok, channel_ok)` — the two pages a YouTube scraper actually needs.
+        """`(search_ok, watch_ok)` — the two pages a YouTube scraper actually needs.
+
+        The second probe used to be `youtube.com/@YouTube/about`, and it was a bad
+        test: fetched from the server that page came back as 583 KB carrying none of
+        the bootstrap markers at all, so `aiohttp_clean` — and through it `dual_clean`,
+        the strict target — rested on a page that a healthy connection fails. A watch
+        page is both a valid test and the page the client actually loads.
 
         Sequential on purpose. Firing both at once through one proxy measurably kills
         it: a staggered two-connection variant of the L1 probe recovered 17 % of a
         known-live set where the sequential one recovered 50 %.
         """
         search_ok = await self._youtube_page_ok(host, port, protocol, self.cfg.yt_search_url)
-        channel_ok = await self._youtube_page_ok(host, port, protocol, self.cfg.yt_channel_url)
-        return search_ok, channel_ok
+        watch_ok = await self._youtube_page_ok(host, port, protocol, self.cfg.yt_watch_url)
+        return search_ok, watch_ok
 
     # ─── anonymity ─────────────────────────────────────────────────────────
 
@@ -250,13 +264,39 @@ class Checker:
     async def _fetch(self, host: str, port: int, protocol: str, url: str) -> str | None:
         try:
             async with (
+                self._heavy,
                 self._gate,
                 self._session(host, port, protocol, self.cfg.l2_total_timeout_sec) as session,
                 session.get(url) as response,
             ):
-                return await response.text(errors="replace")
+                return await self._read_capped(response)
         except Exception:  # noqa: BLE001
             return None
+
+    async def _read_capped(self, response: aiohttp.ClientResponse) -> str:
+        """Read the head of the body and drop the connection on the rest.
+
+        Nothing downstream needs a whole page. Measured against YouTube from the
+        server: the search page is 897 KB, a watch page 1.22 MB, and every marker
+        worth testing sits in the first 55 KB — `ytcfg.set` at 1.85 KB. A Google
+        results page is 92 KB and `l2_ok_min_bytes` is 20 KB. So the tail was pure
+        cost, and it was charged to a free proxy moving tens of kilobytes a second,
+        which is why these probes held their concurrency slots for so long.
+
+        Exiting the `async with` closes the response, so the remainder is never
+        transferred rather than being read and discarded.
+        """
+        cap = self.cfg.max_body_bytes
+        chunks: list[bytes] = []
+        size = 0
+        # `StreamReader.read(n)` returns whatever is buffered, not n bytes, so a single
+        # call would usually stop at the first TCP segment. Chunks until the cap.
+        async for chunk in response.content.iter_chunked(16_384):
+            chunks.append(chunk)
+            size += len(chunk)
+            if size >= cap:
+                break
+        return b"".join(chunks)[:cap].decode("utf-8", errors="replace")
 
     # ─── plumbing ──────────────────────────────────────────────────────────
 

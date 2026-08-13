@@ -113,3 +113,54 @@ async def test_the_checker_caps_total_in_flight_checks_across_every_queue(tmp_pa
     )
     assert peak <= 5, f"gate leaked: {peak} concurrent against a cap of 5"
     assert peak > 1, "the gate must not serialise the checks either"
+
+
+async def test_page_loads_cannot_starve_the_liveness_checks():
+    """Regression: the second pool collapse, 2358 alive -> 132, with the gate already in.
+
+    Bounding the *count* of in-flight requests was not enough, because a YouTube page
+    load is not the same size as an L1 probe. Measured from the server: the search
+    page is 897 KB and a watch page 1.22 MB, so through a free proxy one of those
+    holds its slot for ~10 s while an L1 probe holds it for ~2 s. A 272-proxy sweep
+    therefore parked the shared budget and the L1 sweeps behind it timed out into
+    "dead" — the logs show L1, L2 and YouTube collapsing inside the same minute.
+
+    So heavy transfers draw on a sub-budget: they can take at most
+    `max_inflight_heavy` of `max_inflight`, and the rest is always there for L1.
+    """
+    from unlimproxy.checker import Checker
+    from unlimproxy.config import Settings
+
+    settings = Settings(sources=[])
+    settings.checker.max_inflight = 20
+    settings.checker.max_inflight_heavy = 3
+    checker = Checker(settings.checker)
+
+    heavy_peak = heavy_live = 0
+    l1_done = 0
+
+    async def fake_page(host, port, protocol, url):
+        nonlocal heavy_peak, heavy_live
+        async with checker._heavy, checker._gate:
+            heavy_live += 1
+            heavy_peak = max(heavy_peak, heavy_live)
+            await asyncio.sleep(0.05)  # a page load: slow, and it holds the slot
+            heavy_live -= 1
+        return True
+
+    async def fake_l1(host, port, protocol=None, prefilter=False):
+        nonlocal l1_done
+        async with checker._gate:
+            await asyncio.sleep(0.001)
+            l1_done += 1
+        return L1Result(ok=True)
+
+    checker._youtube_page_ok = fake_page
+    checker.check_l1 = fake_l1
+
+    await asyncio.gather(
+        *(checker.check_youtube(f"10.0.0.{i}", 1080, "socks5") for i in range(30)),
+        *(checker.check_l1(f"10.0.1.{i}", 1080, "socks5") for i in range(200)),
+    )
+    assert heavy_peak <= 3, f"heavy budget leaked: {heavy_peak} concurrent against a cap of 3"
+    assert l1_done == 200, "liveness checks must not be starved by the page loads"

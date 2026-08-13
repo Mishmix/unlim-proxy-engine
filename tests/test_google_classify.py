@@ -78,8 +78,24 @@ def test_google_captcha_markers_would_reject_a_healthy_youtube_page():
     `?target=` could never match anything."""
     from unlimproxy.checker import CAPTCHA_MARKERS
 
-    healthy_youtube = "<html><script src='/recaptcha/api.js'></script>var ytInitialData = {};"
+    healthy_youtube = "<html><script src='/recaptcha/api.js'></script>ytcfg.set({});"
     assert any(m in healthy_youtube.lower() for m in CAPTCHA_MARKERS)
 
     cfg = CheckerCfg()
     assert cfg.yt_required_marker in healthy_youtube
+
+
+def test_the_youtube_marker_is_reachable_inside_the_read_cap():
+    """The marker and the byte cap are one decision, not two.
+
+    Measured on the live search page: `ytInitialData` starts at byte 743 167, so the
+    old probe could not be truncated at all — testing for it meant pulling all 897 KB
+    through a free proxy, which is what let a YouTube sweep hold every concurrency
+    slot in the process. `ytcfg.set` is the same evidence at byte 1 852. An A/B run
+    over 40 live proxies moved 3.0 MB instead of 56.6 MB and passed *more* of them
+    (dual 21 vs 15), so the cap costs no accuracy.
+    """
+    cfg = CheckerCfg()
+    assert 1_852 + len(cfg.yt_required_marker) < cfg.max_body_bytes
+    assert cfg.max_body_bytes > cfg.yt_ok_min_bytes, "the size floor must be reachable"
+    assert cfg.max_body_bytes > cfg.l2_ok_min_bytes, "SEARCH_OK must stay reachable too"

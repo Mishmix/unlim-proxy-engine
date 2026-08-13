@@ -40,6 +40,14 @@ tcp_probe_timeout_sec = 2   # raw TCP pre-probe only; 94 % of live proxies answe
 # то есть 70 * 2,27 ≈ 160 одновременных. 250 взято с запасом, потому что холодная
 # очередь дешевле средней (TCP-префильтр отсекает до TLS).
 max_inflight = 250
+# Из этих 250 слотов страницам достаётся только max_inflight_heavy. Замер, который
+# этого потребовал: страница поиска YouTube — 897 КБ, watch — 1,22 МБ, и через
+# бесплатный прокси такая передача держит слот ~10 с. Пятидесяти таких хватало,
+# чтобы забить общий пул и уронить L1 в таймауты: пул падал с 2358 живых до 132.
+max_inflight_heavy = 60
+# Верхняя граница чтения ответа: остальное не читается, соединение закрывается.
+# Все маркеры, которые нам нужны, лежат в первых 55 КБ — см. yt_required_marker.
+max_body_bytes = 65536
 l1_total_timeout_sec = 8
 l2_total_timeout_sec = 12
 l2_min_interval_sec = 600   # never L2-check the same proxy more often than this
@@ -50,12 +58,17 @@ l2_queries = [
     "coffee", "guitar", "library", "bicycle", "garden", "museum", "sunset",
 ]
 yt_search_url = "https://www.youtube.com/results?search_query=test&sp=EgIQAg%3D%3D"
-yt_channel_url = "https://www.youtube.com/@YouTube/about"
+# Была страница @YouTube/about — плохая проба: с сервера она отдаёт 583 КБ вообще
+# без bootstrap-маркеров, то есть здоровое соединение её не проходит. А watch —
+# ровно та страница, которую грузит клиент.
+yt_watch_url = "https://www.youtube.com/watch?v=jNQXAC9IVRw"
 yt_total_timeout_sec = 12
 yt_ok_min_bytes = 10000
 # A real YouTube page carries this bootstrap payload; an interstitial or a proxy's own
 # error page does not. Matching on "recaptcha" instead rejects every healthy page.
-yt_required_marker = "ytInitialData"
+# ytInitialData стоял на 743 167-м байте страницы поиска, то есть ради него качалась
+# вся страница целиком. ytcfg.set — то же самое доказательство на 1 852-м байте.
+yt_required_marker = "ytcfg.set"
 yt_min_interval_sec = 1800  # never re-probe YouTube for the same proxy more often
 anonymity_ip_url = "https://api.ipify.org?format=json"
 anonymity_judge_url = "http://azenv.net/"
@@ -83,14 +96,14 @@ hot_batch = 6000
 warm_interval_sec = 300
 warm_concurrency = 200
 l2_interval_sec = 60      # sweep cadence; each proxy is still gated by checker.l2_min_interval_sec
-l2_concurrency = 8
+l2_concurrency = 20
 # Backs the ?target= filter; each proxy is still gated by checker.yt_min_interval_sec.
 # yt_batch has to cover the whole live pool inside that window, or the set the filter
 # serves is whatever fraction of the pool the sweep last reached. At 480 per 60 s that
 # is 28 800 probes per re-probe window against a pool in the low thousands.
 yt_interval_sec = 60
-yt_concurrency = 12
-yt_batch = 60
+yt_concurrency = 60
+yt_batch = 240
 # Consecutive failed probes before a proxy loses its YouTube flags. One miss is noise —
 # two page loads through a free proxy fail for reasons unrelated to YouTube — and
 # clearing on the first one is what made ?target=youtube collapse to zero on a beat.
