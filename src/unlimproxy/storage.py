@@ -151,6 +151,11 @@ class Storage:
         await self._db.execute("PRAGMA synchronous=NORMAL")
         await self._db.execute("PRAGMA busy_timeout=30000")
         await self._db.execute("PRAGMA temp_store=MEMORY")
+        # 64 MB of page cache against a 240 MB database. The default is 2 MB, which
+        # sends nearly every read to disk — and reads here happen under the lock that
+        # `/v1/report` and every check queue wait on, so page cache misses are latency
+        # everyone feels. Bounded and predictable, against a 1 GB container limit.
+        await self._db.execute("PRAGMA cache_size=-65536")
         await self._db.executescript(TABLES)
         await self._migrate()
         await self._db.executescript(INDEXES)
