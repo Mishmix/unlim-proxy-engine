@@ -31,6 +31,24 @@ if [[ -n "$(git -C "$REPO_ROOT" status --porcelain --untracked-files=no)" ]]; th
   read -rp "продолжить? [y/N] " a; [[ "$a" == [yY] ]] || exit 1
 fi
 
+if [[ "${1:-}" == "--no-build" ]]; then
+  # Ловушка, в которую легко попасть: src/ запечён в образ (Dockerfile COPY), а
+  # bind-монтом наружу висит только config.toml. Без сборки rsync честно кладёт
+  # новый код на диск сервера, docker compose up -d говорит "Started", healthz
+  # отвечает — и работает при этом СТАРЫЙ код из образа. Молча.
+  #
+  # Поэтому сверяем src/ на диске с src/ в работающем контейнере. Сходятся —
+  # правка действительно не в коде, можно перезапускать. Не сходятся — отказ.
+  HASH="find src -name '*.py' -exec sha256sum {} + | sort -k2 | sha256sum | cut -c1-16"
+  LOCAL=$(cd "$REPO_ROOT" && eval "$HASH")
+  RUNNING=$("${SSH[@]}" "cd $REMOTE_DIR/deploy && $DC exec -T unlimproxy sh -c \"cd /app && $HASH\"" 2>/dev/null | tr -d '\r')
+  if [[ -n "$RUNNING" && "$LOCAL" != "$RUNNING" ]]; then
+    echo "!! --no-build, но src/ отличается от кода в контейнере ($LOCAL != $RUNNING)"
+    echo "   код запечён в образ, перезапуск его не подхватит — ./deploy/push.sh без флага"
+    exit 1
+  fi
+fi
+
 echo "== заливаю $REPO_ROOT -> $HOST:$REMOTE_DIR"
 # data/ исключён жёстко: там 175 МБ proxies.db и ~215 МБ geo-баз сервера. Без
 # этой строки rsync --delete затёр бы прод локальной копией. Исключённое
@@ -82,21 +100,6 @@ rsync -az -e "ssh -i $KEY -o StrictHostKeyChecking=accept-new" \
 }
 
 if [[ "${1:-}" == "--no-build" ]]; then
-  # Ловушка, в которую легко попасть: src/ запечён в образ (Dockerfile COPY), а
-  # bind-монтом наружу висит только config.toml. Без сборки rsync честно кладёт
-  # новый код на диск сервера, docker compose up -d говорит "Started", healthz
-  # отвечает — и работает при этом СТАРЫЙ код из образа. Молча.
-  #
-  # Поэтому сверяем src/ на диске с src/ в работающем контейнере. Сходятся —
-  # правка действительно не в коде, можно перезапускать. Не сходятся — отказ.
-  HASH="find src -name '*.py' -exec sha256sum {} + | sort -k2 | sha256sum | cut -c1-16"
-  LOCAL=$(cd "$REPO_ROOT" && eval "$HASH")
-  RUNNING=$("${SSH[@]}" "cd $REMOTE_DIR/deploy && $DC exec -T unlimproxy sh -c \"cd /app && $HASH\"" 2>/dev/null | tr -d '\r')
-  if [[ -n "$RUNNING" && "$LOCAL" != "$RUNNING" ]]; then
-    echo "!! --no-build, но src/ отличается от кода в контейнере ($LOCAL != $RUNNING)"
-    echo "   код запечён в образ, перезапуск его не подхватит — ./deploy/push.sh без флага"
-    exit 1
-  fi
   echo "== без сборки, перезапускаю"
   "${SSH[@]}" "cd $REMOTE_DIR/deploy && $DC up -d"
 else
