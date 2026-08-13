@@ -75,7 +75,8 @@ class QueuesCfg(BaseModel):
     cold_batch: int = 2000
     cold_window_batches: int = 10
     hot_interval_sec: int = 90
-    hot_concurrency: int = 100
+    hot_concurrency: int = 200
+    hot_batch: int = 6000
     warm_interval_sec: int = 300
     warm_concurrency: int = 200
     l2_interval_sec: int = 60

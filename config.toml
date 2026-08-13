@@ -56,8 +56,14 @@ protocol_probe_order = ["socks5", "socks4", "http"]
 cold_concurrency = 1000
 cold_batch = 2000
 cold_window_batches = 10    # rows pulled per cold query, in units of cold_batch
+# hot_batch — сколько живых прокси успевает перепроверить один проход. Всё, что
+# проход не достал за hot_interval_sec, стареет мимо max_age_sec API и перестаёт
+# выдаваться, поэтому этот потолок и есть настоящий потолок пула: сколько бы
+# холодная очередь ни нашла, живыми считаются только те, кого успели подтвердить.
+# Держать выше ожидаемого числа живых.
 hot_interval_sec = 90
-hot_concurrency = 100
+hot_concurrency = 200
+hot_batch = 6000
 warm_interval_sec = 300
 warm_concurrency = 200
 l2_interval_sec = 60      # sweep cadence; each proxy is still gated by checker.l2_min_interval_sec

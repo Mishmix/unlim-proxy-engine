@@ -129,8 +129,15 @@ class Scheduler:
             )
 
     async def _hot_once(self) -> None:
+        """The batch cap is what actually limits the usable pool.
+
+        Anything the sweep does not reach inside `hot_interval_sec` ages past the
+        API's default `max_age_sec` and stops being handed out, so a cap below the
+        number of live proxies silently becomes the ceiling on the pool — no matter how
+        many the cold queue finds. It has to stay ahead of the live count.
+        """
         async with self._db_lock:
-            batch = await self.storage.fetch_hot(self.settings.queues.hot_concurrency * 12)
+            batch = await self.storage.fetch_hot(self.settings.queues.hot_batch)
         if batch:
             await self._run_l1(batch, self.settings.queues.hot_concurrency, "hot")
             await self.rebuild_pool()
