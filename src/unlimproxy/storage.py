@@ -341,11 +341,30 @@ class Storage:
             "INSERT INTO checks (at, kind, ok) VALUES (?, ?, ?)", (now, f"{kind}_total", total)
         )
 
-    async def set_geo(self, proxy_id: int, fields: dict[str, Any]) -> None:
-        assignments = ", ".join(f"{k} = ?" for k in fields)
-        await self.db.execute(
+    # Every geo lookup can produce a different subset of keys, so writing them one row
+    # at a time needs one statement per row. `GEO_COLUMNS` fixes the shape instead:
+    # a missing key writes NULL through COALESCE, which keeps whatever is already
+    # there, and the whole batch becomes a single `executemany`.
+    GEO_COLUMNS = ("country", "country_name", "city", "asn", "asn_org", "asn_type")
+
+    async def set_geo_many(self, rows: Sequence[tuple[int, dict[str, Any]]]) -> None:
+        """One statement for the whole batch.
+
+        This used to be one `UPDATE` per proxy, issued inside the scheduler's database
+        lock. aiosqlite charges a thread hand-off per statement, so a batch of five
+        thousand held the lock that every queue and every `/v1/stats` waits on for tens
+        of seconds — measured at 29.7 s on a `POST /v1/report` that does nothing but a
+        lookup and an update. The pool used to be small enough for it not to show.
+        """
+        if not rows:
+            return
+        assignments = ", ".join(f"{c} = COALESCE(?, {c})" for c in self.GEO_COLUMNS)
+        await self.db.executemany(
             f"UPDATE proxies SET {assignments}, geo_done = 1 WHERE id = ?",
-            (*fields.values(), proxy_id),
+            [
+                (*(fields.get(c) for c in self.GEO_COLUMNS), proxy_id)
+                for proxy_id, fields in rows
+            ],
         )
 
     async def set_anonymity(self, proxy_id: int, level: str | None) -> None:

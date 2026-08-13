@@ -283,15 +283,23 @@ class Scheduler:
         Anonymity costs two requests through the proxy, so it runs once per proxy."""
         async with self._db_lock:
             pending_geo = await self.storage.fetch_pending_geo(5000)
-            for proxy in pending_geo:
-                fields = self.geo.lookup(proxy.host)
-                if fields:
-                    await self.storage.set_geo(proxy.id, fields)
-                    for key, value in fields.items():
-                        setattr(proxy, key, value)
-                elif self.geo.ready:
-                    await self.storage.set_geo(proxy.id, {"asn_type": "residential"})
-            if pending_geo:
+
+        # The lookups are local mmdb reads with no database in them, so they belong
+        # outside the lock — and the writes go back as one statement rather than five
+        # thousand. Holding the lock across both is what made a `POST /v1/report` take
+        # half a minute once the pool grew.
+        rows: list[tuple[int, dict]] = []
+        for proxy in pending_geo:
+            fields = self.geo.lookup(proxy.host)
+            if fields:
+                rows.append((proxy.id, fields))
+            elif self.geo.ready:
+                # The databases are loaded and still have nothing on this address.
+                # That is an answer, so mark it done rather than asking again forever.
+                rows.append((proxy.id, {"asn_type": "residential"}))
+        async with self._db_lock:
+            if rows:
+                await self.storage.set_geo_many(rows)
                 await self.storage.commit()
 
             pending_anon = await self.storage.fetch_pending_anonymity(60)

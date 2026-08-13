@@ -345,3 +345,38 @@ async def test_scraper_keeps_network_out_of_the_database_lock(storage, monkeypat
     await storage.commit()
     assert stored[0].new == 1
     assert await storage.find("203.0.113.7", 1080, "socks5") is not None
+
+
+async def test_geo_batch_writes_partial_answers_without_wiping_the_rest(storage):
+    """One statement for the whole batch, and every row can carry a different subset
+    of keys — a lookup that only resolved the country must not blank the ASN.
+
+    This was one `UPDATE` per proxy inside the scheduler's database lock. aiosqlite
+    charges a thread hand-off per statement, so five thousand of them held the lock
+    that every queue and `/v1/stats` waits on: a `POST /v1/report` doing nothing but a
+    lookup and an update measured 29.7 s on the live service.
+    """
+    await storage.upsert_candidates(
+        [Candidate("203.0.113.5", 1080, "s", "socks5"), Candidate("203.0.113.6", 1080, "s", "http")]
+    )
+    rows = await storage._rows("SELECT id FROM proxies ORDER BY id")
+    full, partial = rows[0]["id"], rows[1]["id"]
+
+    await storage.set_geo_many(
+        [
+            (full, {"country": "DE", "country_name": "Germany", "asn": "AS1", "asn_org": "X"}),
+            (partial, {"country": "US"}),
+        ]
+    )
+    await storage.commit()
+
+    state = {r["id"]: r for r in await storage._rows("SELECT * FROM proxies")}
+    assert (state[full]["country"], state[full]["asn"]) == ("DE", "AS1")
+    assert state[partial]["country"] == "US"
+    assert state[partial]["asn"] is None
+    assert all(state[i]["geo_done"] == 1 for i in (full, partial))
+    assert not await storage.fetch_pending_geo(10), "geo_done keeps them out of the queue"
+
+
+async def test_geo_batch_tolerates_an_empty_batch(storage):
+    await storage.set_geo_many([])
