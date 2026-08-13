@@ -217,6 +217,8 @@ def test_target_filters_on_the_matching_column(client):
     # The stale entry is excluded by max_age_sec whatever its YouTube columns say.
     fresh = [p for p in client.app.state.scheduler.pool if p.last_verified_at != ago(3600)]
     searcher, fetcher, both_ok = fresh[0], fresh[1], fresh[2]
+    for proxy in (searcher, fetcher, both_ok):
+        proxy.last_yt_at = ago(60)
     searcher.parser_clean = 1
     fetcher.aiohttp_clean = 1
     both_ok.parser_clean = both_ok.aiohttp_clean = both_ok.dual_clean = 1
@@ -227,6 +229,33 @@ def test_target_filters_on_the_matching_column(client):
     assert {p["proxy"] for p in aiohttp_only["proxies"]} == {fetcher.url, both_ok.url}
     both = client.get("/v1/proxies?target=youtube").json()
     assert {p["proxy"] for p in both["proxies"]} == {both_ok.url}
+
+
+def test_a_stale_youtube_verdict_does_not_pass_as_a_fresh_one(client):
+    """`max_age_sec` ages the liveness check, and only that.
+
+    Reported from the Lead Engine side: a proxy re-verified alive seconds ago can be
+    carrying a YouTube verdict from an hour back, because the YouTube sweep runs on
+    its own much slower cadence. The client asked for proxies verified within five
+    minutes and got some whose YouTube evidence predated that by an order of
+    magnitude, so `?target=youtube` promised more freshness than it had.
+    """
+    fresh = [p for p in client.app.state.scheduler.pool if p.last_verified_at != ago(3600)]
+    stale_verdict, recent_verdict = fresh[0], fresh[1]
+    for proxy in (stale_verdict, recent_verdict):
+        proxy.parser_clean = proxy.aiohttp_clean = proxy.dual_clean = 1
+    stale_verdict.last_yt_at = ago(7200)
+    recent_verdict.last_yt_at = ago(60)
+
+    served = client.get("/v1/proxies?target=youtube").json()
+    assert {p["proxy"] for p in served["proxies"]} == {recent_verdict.url}
+
+    # The bound is the caller's to widen when a stale verdict is good enough.
+    widened = client.get("/v1/proxies?target=youtube&max_target_age_sec=10800").json()
+    assert {p["proxy"] for p in widened["proxies"]} == {
+        stale_verdict.url,
+        recent_verdict.url,
+    }
 
 
 def test_unknown_target_is_rejected(client):

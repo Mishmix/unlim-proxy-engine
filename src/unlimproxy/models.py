@@ -86,6 +86,7 @@ class Proxy:
     last_check_at: str | None = None
     last_verified_at: str | None = None
     last_l2_at: str | None = None
+    last_yt_at: str | None = None
     source: str | None = None
     history: str = ""
     """Sliding window of the last checks, oldest first: '1' = ok, '0' = fail."""

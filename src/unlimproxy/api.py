@@ -68,6 +68,7 @@ class Filters(BaseModel):
     asn_type: str | None = None
     min_score: float = 0.0
     max_age_sec: int = 300
+    max_target_age_sec: int = 3600
 
 
 class ReportBody(BaseModel):
@@ -88,6 +89,18 @@ def filters(
     asn_type: Literal["residential", "datacenter"] | None = None,
     min_score: Annotated[float, Query(ge=0, le=100)] = 0.0,
     max_age_sec: Annotated[int, Query(ge=1)] = 300,
+    max_target_age_sec: Annotated[
+        int,
+        Query(
+            ge=1,
+            description=(
+                "Freshness bound for the ?target= verdict itself. `max_age_sec` only "
+                "ages the liveness check; the YouTube probe runs on its own, much "
+                "slower cadence, so without this a proxy could be verified alive "
+                "seconds ago and carry a YouTube verdict from an hour back."
+            ),
+        ),
+    ] = 3600,
 ) -> Filters:
     return Filters(
         limit=limit,
@@ -101,6 +114,7 @@ def filters(
         asn_type=asn_type,
         min_score=min_score,
         max_age_sec=max_age_sec,
+        max_target_age_sec=max_target_age_sec,
     )
 
 
@@ -111,6 +125,13 @@ def matches(proxy: Proxy, f: Filters) -> bool:
         return False
     if f.target == "youtube" and not proxy.dual_clean:
         return False
+    if f.target is not None:
+        # All three target flags are written by the same sweep, so one timestamp
+        # bounds all of them. A verdict older than the sweep's own cadence means the
+        # sweep has not reached this proxy, not that the proxy is still good.
+        target_age = age_sec(proxy.last_yt_at)
+        if target_age is None or target_age > f.max_target_age_sec:
+            return False
     if f.google_clean and not proxy.google_clean:
         return False
     if f.protocol and proxy.protocol not in f.protocol:
