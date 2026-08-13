@@ -80,8 +80,10 @@ class QueuesCfg(BaseModel):
     warm_concurrency: int = 200
     l2_interval_sec: int = 60
     l2_concurrency: int = 30
-    yt_interval_sec: int = 120
-    yt_concurrency: int = 20
+    yt_interval_sec: int = 60
+    yt_concurrency: int = 60
+    yt_batch: int = 480
+    yt_fail_grace: int = 2
     quarantine_interval_sec: int = 1800
     quarantine_concurrency: int = 50
     fail_streak_quarantine: int = 3

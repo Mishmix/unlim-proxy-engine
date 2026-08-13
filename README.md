@@ -93,10 +93,11 @@ hundreds of requests per second, free proxies will not carry the load.
 This is why every response carries `last_verified_at` and `age_sec`, and why the default
 `max_age_sec` is 300. Anything older is not worth handing out.
 
-A full pass over every candidate takes about 1.7 hours at 112 checks/s, so the pool keeps
-growing for the first hours after a cold start. The cold queue is prioritised, though —
-SOCKS5 first, and each source's share of the queue set by its measured hit rate — so
-useful proxies appear within the first minutes.
+A full pass over every candidate takes about an hour, and the cold queue never stops:
+an address that has not yet answered keeps coming round, longest wait first. That is the
+point. A free proxy blinks — dead now, alive in an hour — so one probe per address is not
+a verdict, it is a single sample. Measured on the live database, 6.17 % of the addresses
+that had failed their one and only check were alive when probed again.
 
 ---
 
@@ -179,11 +180,25 @@ different tests and a proxy routinely passes one and fails the other. `parser` a
 `youtube` means both. A proxy that has not been probed yet matches none of them — the
 columns start at 0 and only a completed probe sets them.
 
+The flags survive one failed probe. Two page loads through a free proxy miss for reasons
+that have nothing to do with YouTube, and clearing on the first miss is what made this
+set collapse to zero on a regular beat — the client had to fall back to less-verified
+proxies to keep working. `yt_fail_grace` consecutive misses is the verdict; one is noise.
+The queue also serves never-probed proxies before it re-tests its own members, which it
+previously did the other way round, so the set could only ever shrink.
+
 ### `POST /v1/report`
 
 Feedback from your client. A real failure under real load is a better signal than any
 synthetic probe, so it is weighted more heavily than the service's own checks: `ok: false`
-costs up to 20 score points (decaying over an hour) and triggers an immediate re-check.
+costs up to 20 score points (decaying over an hour) and queues a re-check.
+
+**It answers immediately.** The re-check runs on a background loop that batches whatever
+came in over the last few seconds. This used to be inline, and proving a dead proxy dead
+costs the full L1 timeout, so reporting one took over six seconds — long enough that the
+heaviest client in production wrapped a short timeout around the call and then muted its
+own reporting entirely. The pool spent months not hearing which proxies its biggest user
+had burned, which is the one signal it most wants.
 
 ```bash
 curl -s -X POST localhost:8000/v1/report \
@@ -266,21 +281,32 @@ which is what `asn_type` is for.
 | `warm` | were alive, failed up to 3 times in a row | 5 min | 200 |
 | `l2` | hot proxies whose Google check is over 10 min old | 10 min per proxy | 30 |
 | `quarantine` | 3+ consecutive failures | 30 min, one more chance | 50 |
-| `youtube` | hot proxies, for the `?target=` filter | 30 min per proxy | 20 |
+| `youtube` | hot proxies, for the `?target=` filter | 30 min per proxy | 60 |
 
-Ten consecutive failures deletes the proxy. So does being absent from every source for
-seven days while dead.
+Ten consecutive failures deletes a proxy **that has answered at least once**. A
+candidate that has never answered is retired by its sources instead — gone from every
+list for seven days — because the carousel re-tries everything, and an unscoped rule
+would delete the whole backlog every ten passes only for the next scrape to put it
+straight back.
 
 A given proxy is never Google-checked more than once per 10 minutes — hammering
 `/search` is itself what triggers the captcha.
 
-The cold queue hands out slots in rounds: one candidate from every source, then the next
-from every source, and only within a round does protocol and source hit rate decide the
-order. Straight rank ordering does not survive a large backlog — on a 664 000-row
-database a 20 000-candidate window went entirely to two sources, and one of them spent
-15 668 checks to return nothing. A source with no measured hit rate yet falls back to its
-configured priority and ties with a dozen others, so ranking alone cannot break that up.
-Rounds sample every source early enough for the scoring to learn what each one is worth.
+The cold queue is a carousel over everything that has never answered, ordered by who has
+waited longest, with freshly scraped candidates jumping the round. It selects on
+`checks_ok = 0`, not `last_check_at IS NULL`, and that distinction is the single most
+expensive thing this service ever got wrong: with the old predicate every address got
+exactly one probe in its life, and the ~99 % that missed it fell out of every queue at
+once, because `warm` and `quarantine` both require `checks_ok > 0`. On the production
+database 782 127 of 782 530 rows sat in no queue at all, the service ran 1.7 checks a
+second against a capacity of a hundred, and the pool was a 187-proxy fossil.
+
+There is no source striding and no protocol ordering in it. Both existed to choose which
+rows a one-shot drain would ever reach; a carousel reaches all of them. They were not
+free either — `ROW_NUMBER() OVER (PARTITION BY source …)` cannot use an index, and on
+782 000 rows the window query took 7.3 s while holding the lock every other queue needs.
+The carousel walks its own partial index in 0.06 s. Note the `INDEXED BY`: left alone the
+planner takes the wrong index and rebuilds a temp B-tree every window.
 
 The cold queue is also the only queue that TCP-pre-probes candidates whose protocol is
 already labelled. That is worth about +61 % throughput and costs a few live proxies whose

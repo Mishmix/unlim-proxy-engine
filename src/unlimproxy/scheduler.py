@@ -19,11 +19,15 @@ from .checker import Checker, gather_limited
 from .config import Settings
 from .geo import Geo
 from .models import L1Result, Proxy
-from .scoring import cold_queue_weight, score, uptime_ratio
+from .scoring import score, uptime_ratio
 from .scraper import Scraper
 from .storage import Storage, push_history, utcnow
 
 log = logging.getLogger(__name__)
+
+# A client that has lost its way could report faster than the recheck loop drains.
+# The cap makes that a dropped signal instead of unbounded memory.
+_REPORT_RECHECK_CAP = 5000
 
 
 def _ago(seconds: int) -> str:
@@ -44,6 +48,7 @@ class Scheduler:
         self._db_lock = asyncio.Lock()
         self._recently_served: dict[int, float] = {}
         self._cold_buffer: list[Proxy] = []
+        self._report_recheck: dict[int, Proxy] = {}
 
     # ─── lifecycle ─────────────────────────────────────────────────────────
 
@@ -60,6 +65,7 @@ class Scheduler:
             ("warm", self._warm_once, self.settings.queues.warm_interval_sec),
             ("l2", self._l2_once, self.settings.queues.l2_interval_sec),
             ("youtube", self._yt_once, self.settings.queues.yt_interval_sec),
+            ("report", self._report_once, 5),
             ("quarantine", self._quarantine_once, self.settings.queues.quarantine_interval_sec),
             ("enrich", self._enrich_once, 20),
             ("maintenance", self._maintenance_once, 600),
@@ -102,24 +108,17 @@ class Scheduler:
     # ─── check queues ──────────────────────────────────────────────────────
 
     async def _cold_once(self) -> None:
-        """New candidates, SOCKS5 first, best sources first (RESEARCH 1.2 and 1.4).
+        """The carousel of candidates that have never answered, oldest attempt first.
 
-        The ordering cannot be satisfied by an index — the source ranking is recomputed
-        from live hit rates — so SQLite sorts every unchecked row to answer it, which at
-        a 600 000-row backlog costs a few hundred milliseconds while holding the lock
-        every other queue needs. Once per window instead of once per second is the same
-        ordering for a tenth of the work.
+        Fetched a window at a time rather than a batch at a time: the query reads and
+        materialises twenty thousand rows while holding the lock every other queue
+        needs, and doing that once per window instead of once per second is the same
+        work for a tenth of the cost.
         """
         if not self._cold_buffer:
-            stats = await self.storage.load_sources()
-            priorities = {s.name: s.priority for s in self.settings.enabled_sources}
-            weights = {
-                name: cold_queue_weight(stats.get(name), priorities.get(name, 3))
-                for name in priorities
-            }
             window = self.settings.queues.cold_batch * self.settings.queues.cold_window_batches
             async with self._db_lock:
-                self._cold_buffer = await self.storage.fetch_cold(window, weights)
+                self._cold_buffer = await self.storage.fetch_cold(window)
         batch, self._cold_buffer = (
             self._cold_buffer[: self.settings.queues.cold_batch],
             self._cold_buffer[self.settings.queues.cold_batch :],
@@ -186,10 +185,15 @@ class Scheduler:
     async def _yt_once(self) -> None:
         """Whether a live proxy can actually load YouTube, which is what the
         `target=` filter promises. Two page loads per proxy, so it stays on the hot
-        pool only and each proxy is re-tested at most every `yt_min_interval_sec`."""
+        pool only and each proxy is re-tested at most every `yt_min_interval_sec`.
+
+        The sweep ends in `rebuild_pool`: the flags it writes are the entire content of
+        `?target=`, and without a rebuild they sat in the database until some other
+        queue happened to refresh the pool the API answers from.
+        """
         async with self._db_lock:
             batch = await self.storage.fetch_yt_due(
-                self.settings.queues.yt_concurrency * 6,
+                self.settings.queues.yt_batch,
                 _ago(self.settings.checker.yt_min_interval_sec),
             )
         if not batch:
@@ -198,20 +202,18 @@ class Scheduler:
             [self.checker.check_youtube(p.host, p.port, p.protocol) for p in batch],
             self.settings.queues.yt_concurrency,
         )
+        rows: list[tuple] = []
         both = 0
+        for proxy, result in zip(batch, results, strict=True):
+            search_ok, channel_ok = (False, False) if isinstance(result, BaseException) else result
+            rows.append((proxy.id, search_ok, channel_ok))
+            both += search_ok and channel_ok
         async with self._db_lock:
-            for proxy, result in zip(batch, results, strict=True):
-                if isinstance(result, BaseException):
-                    continue
-                search_ok, channel_ok = result
-                proxy.parser_clean = int(search_ok)
-                proxy.aiohttp_clean = int(channel_ok)
-                proxy.dual_clean = int(search_ok and channel_ok)
-                both += proxy.dual_clean
-                await self.storage.record_yt(proxy.id, search_ok, channel_ok)
+            await self.storage.record_yt_many(rows, self.settings.queues.yt_fail_grace)
             await self.storage.record_checks("yt", both, len(batch))
             await self.storage.commit()
         log.info("youtube sweep", extra={"checked": len(batch), "dual_clean": both})
+        await self.rebuild_pool()
 
     async def _run_l1(
         self, batch: Sequence[Proxy], concurrency: int, queue: str, prefilter: bool = False
@@ -340,13 +342,39 @@ class Scheduler:
         return chosen
 
     async def report(self, host: str, port: int, protocol: str, ok: bool) -> bool:
-        """Client feedback beats our own probes, so it also forces a recheck."""
+        """Client feedback beats our own probes, so it also forces a recheck — but the
+        recheck happens on `_report_once`, not here.
+
+        This used to run the L1 probe and a full `rebuild_pool` inline, before
+        answering. A dead proxy takes the whole `l1_total_timeout_sec` to prove itself
+        dead, so reporting one cost the caller several seconds. The Lead Engine client
+        measured over six seconds, wired a short timeout around the call, and then muted
+        its own reporting after a few of those — so the pool stopped hearing which
+        proxies its heaviest user had burned, which is exactly the signal it most wants.
+        Answering immediately and rechecking in the background costs the pool nothing
+        and gets the feedback back.
+        """
         async with self._db_lock:
             updated = await self.storage.apply_client_report(host, port, protocol, ok)
             proxy = await self.storage.find(host, port, protocol)
         if not updated or proxy is None:
             return False
-        if not ok:
-            await self._run_l1([proxy], 1, "report")
-            await self.rebuild_pool()
+        if not ok and len(self._report_recheck) < _REPORT_RECHECK_CAP:
+            # Keyed by id: a client burning through a batch reports the same proxy
+            # more than once, and one recheck settles all of them.
+            self._report_recheck[proxy.id] = proxy
         return True
+
+    async def _report_once(self) -> None:
+        """Rechecks what clients reported dead, in one batch instead of one at a time.
+
+        Batching matters as much as the deferral: every recheck ends in a
+        `rebuild_pool`, which reads and re-sorts the entire live pool, and doing that
+        per report would make a busy client the most expensive thing in the process.
+        """
+        if not self._report_recheck:
+            return
+        batch = list(self._report_recheck.values())
+        self._report_recheck.clear()
+        await self._run_l1(batch, min(len(batch), self.settings.queues.hot_concurrency), "report")
+        await self.rebuild_pool()

@@ -21,32 +21,6 @@ log = logging.getLogger(__name__)
 
 HISTORY_WINDOW = 20
 
-# How many rounds of the cold queue a source has to sit out between its own candidates.
-# 1 means it appears in every round; the worst sources appear in one round out of 40.
-_BEST_STRIDE, _WORST_STRIDE, _UNRANKED_STRIDE, _DEAD_STRIDE = 1, 8, 8, 40
-
-
-def _cold_stride(weight: float, best: float) -> int:
-    """How many rounds a source sits out between its own candidates.
-
-    Pure round-robin samples every source, which is what a cold start needs, but it
-    also gives a dump that has proven worthless exactly as many slots as the best
-    curated feed. Pure rank ordering does the opposite and lets one source own the
-    whole window. Striding is the middle: everyone appears, a source appears as often
-    as its hit rate compares to the best one, and a source `cold_queue_weight` has
-    zeroed appears rarely without ever being switched off — it still contributes
-    unique addresses.
-
-    The ratio is against the best weight rather than the rank position, so sources
-    that have not been measured yet all share one weight and therefore one stride
-    instead of being spread out by an ordering that means nothing.
-    """
-    if weight <= 0:
-        return _DEAD_STRIDE
-    if best <= 0:
-        return _BEST_STRIDE
-    return min(_WORST_STRIDE, max(_BEST_STRIDE, round(best / weight)))
-
 TABLES = """
 CREATE TABLE IF NOT EXISTS proxies (
   id INTEGER PRIMARY KEY,
@@ -77,6 +51,7 @@ CREATE TABLE IF NOT EXISTS proxies (
   aiohttp_clean INTEGER NOT NULL DEFAULT 0,
   dual_clean INTEGER NOT NULL DEFAULT 0,
   last_yt_at TEXT,
+  yt_fail_streak INTEGER NOT NULL DEFAULT 0,
   UNIQUE(host, port, protocol)
 );
 
@@ -102,8 +77,14 @@ CREATE TABLE IF NOT EXISTS checks (
 # Kept apart from the tables: an index over a column that only `_migrate` adds cannot
 # be created until that migration has run.
 INDEXES = """
-CREATE INDEX IF NOT EXISTS idx_proxies_cold
-  ON proxies(last_check_at) WHERE last_check_at IS NULL;
+-- The old cold index was `(last_check_at) WHERE last_check_at IS NULL`. Its name
+-- would survive `IF NOT EXISTS` untouched on an existing database, so it is dropped
+-- by name and the carousel gets its own.
+DROP INDEX IF EXISTS idx_proxies_cold;
+-- Predicate and column match `fetch_cold` exactly, so the window is an index walk
+-- rather than a sort of three quarters of a million rows under the lock.
+CREATE INDEX IF NOT EXISTS idx_proxies_carousel
+  ON proxies(last_check_at) WHERE checks_ok = 0 AND alive = 0;
 CREATE INDEX IF NOT EXISTS idx_proxies_alive ON proxies(alive, fail_streak, last_check_at);
 CREATE INDEX IF NOT EXISTS idx_proxies_l2 ON proxies(alive, last_l2_at);
 CREATE INDEX IF NOT EXISTS idx_proxies_yt ON proxies(alive, last_yt_at);
@@ -117,6 +98,7 @@ _ADDED_COLUMNS = {
     "aiohttp_clean": "INTEGER NOT NULL DEFAULT 0",
     "dual_clean": "INTEGER NOT NULL DEFAULT 0",
     "last_yt_at": "TEXT",
+    "yt_fail_streak": "INTEGER NOT NULL DEFAULT 0",
 }
 
 _UPSERT = """
@@ -291,24 +273,55 @@ class Storage:
                 fail_rows,
             )
 
-    async def record_yt(self, proxy_id: int, search_ok: bool, channel_ok: bool) -> None:
-        await self.db.execute(
-            """UPDATE proxies SET parser_clean = ?, aiohttp_clean = ?, dual_clean = ?,
-                   last_yt_at = ? WHERE id = ?""",
-            (
-                int(search_ok),
-                int(channel_ok),
-                int(search_ok and channel_ok),
-                utcnow(),
-                proxy_id,
-            ),
+    async def record_yt_many(self, results: Sequence[tuple], fail_grace: int) -> None:
+        """Entries are `(proxy_id, search_ok, channel_ok)`.
+
+        A probe that reached YouTube at all writes its verdict straight through. A
+        probe that reached nothing does *not* clear the flags immediately: it only
+        counts, and the flags survive until `fail_grace` consecutive misses.
+
+        Without that grace the `?target=youtube` set collapsed to zero on a regular
+        beat, and the client had to fall back to less-verified proxies to keep working.
+        Two page loads through a free proxy fail for reasons that have nothing to do
+        with YouTube reachability, and the set is re-swept far more often than the
+        proxies in it actually change, so one miss is noise. Two in a row is a verdict.
+
+        SQLite reads every right-hand side from the pre-update row, so `yt_fail_streak
+        + 1` below is this probe's streak in all four columns.
+        """
+        if not results:
+            return
+        now = utcnow()
+        await self.db.executemany(
+            f"""UPDATE proxies SET
+                    yt_fail_streak = CASE WHEN ?3 THEN 0 ELSE yt_fail_streak + 1 END,
+                    parser_clean = CASE WHEN ?3 THEN ?1
+                        WHEN yt_fail_streak + 1 >= {fail_grace} THEN 0
+                        ELSE parser_clean END,
+                    aiohttp_clean = CASE WHEN ?3 THEN ?2
+                        WHEN yt_fail_streak + 1 >= {fail_grace} THEN 0
+                        ELSE aiohttp_clean END,
+                    dual_clean = CASE WHEN ?3 THEN (?1 AND ?2)
+                        WHEN yt_fail_streak + 1 >= {fail_grace} THEN 0
+                        ELSE dual_clean END,
+                    last_yt_at = ?4
+                WHERE id = ?5""",
+            [(int(s), int(c), int(s or c), now, pid) for pid, s, c in results],
         )
 
     async def fetch_yt_due(self, limit: int, older_than: str) -> list[Proxy]:
+        """Never-probed proxies first, then the longest-unseen.
+
+        The old ordering led with `dual_clean DESC`, which spent every sweep
+        re-testing the proxies already in the set before it would look at a single new
+        candidate. The set could therefore only shrink: it re-litigated its own members
+        and never grew. Freshness is what re-probing is for, so freshness is what
+        orders the queue.
+        """
         return await self._proxies(
             """SELECT * FROM proxies
                WHERE alive = 1 AND (last_yt_at IS NULL OR last_yt_at < ?)
-               ORDER BY dual_clean DESC, last_yt_at IS NOT NULL, score DESC LIMIT ?""",
+               ORDER BY last_yt_at, score DESC LIMIT ?""",
             (older_than, limit),
         )
 
@@ -356,46 +369,47 @@ class Storage:
 
     # ─── queue selection ───────────────────────────────────────────────────
 
-    async def fetch_cold(self, limit: int, source_scores: dict[str, float]) -> list[Proxy]:
-        """Never-checked candidates, one round of every source at a time, and within a
-        round SOCKS5 → SOCKS4 → unknown → HTTP then by source hit rate (RESEARCH 1.2:
-        32 % / 14.5 % / 1.0 %, and 1.4 on junk sources).
+    async def fetch_cold(self, limit: int) -> list[Proxy]:
+        """The carousel: candidates that have never answered, longest wait first.
 
-        Ordering by rank alone lets a single source own the whole window: on a live
-        664 000-row backlog, a 20 000-row window went entirely to two sources and one
-        of them spent 15 668 checks to return nothing. Ranking cannot fix that, because
-        a source with no measured hit rate yet falls back to its configured priority
-        and ties with a dozen others. `ROW_NUMBER` per source turns the window into
-        rounds, so every source is sampled early enough for `cold_queue_weight` to
-        learn what it is worth and demote it.
+        `checks_ok = 0`, not `last_check_at IS NULL`. That one predicate was the whole
+        bottleneck. A free proxy blinks — it answers, vanishes for an hour, answers
+        again — and selecting on `last_check_at IS NULL` gave every address exactly one
+        sample in its lifetime. The ~99 % that missed that single sample fell out of
+        every queue at once, because `warm` and `quarantine` both demand
+        `checks_ok > 0`: an address that never answered on its first try belonged
+        nowhere and was never probed again.
 
-        All of it has to stay in SQL; re-sorting a pre-fetched window in Python cannot
-        recover rows the window never contained.
+        Measured on the live 782 530-row database: 782 127 rows sat in no queue at all,
+        the service ran 1.7 L1 checks a second against a capacity of a hundred, and the
+        pool was a 187-proxy fossil of one long-finished pass. A direct probe of 8 000
+        of those orphans from the server found 42 % reachable over TCP and 6.17 % fully
+        alive — roughly 48 000 live proxies already in the database, invisible.
+
+        So this is not a backlog to drain. Every address that has not yet proved itself
+        keeps coming round, and one that was dead an hour ago is found the next time it
+        wakes up. An address leaves only by answering, into `hot`, or by `prune` at
+        `fail_streak_delete`.
+
+        No source striding and no protocol ordering. Both existed to decide *which*
+        rows a one-shot drain would ever reach, and a carousel reaches all of them, so
+        the only thing left to order by is who has waited longest. They were not free
+        either: `ROW_NUMBER() OVER (PARTITION BY source …)` cannot use an index, and on
+        this database it made the window query take **7.3 s** against **0.45 s** for
+        the plain ordering — while holding the lock every other queue needs. NULL sorts
+        first in SQLite, so a freshly scraped candidate still jumps ahead of the round.
+
+        `INDEXED BY` because the planner gets this one wrong. Left to itself it takes
+        `idx_proxies_yt` for the `alive = 0` seek and then builds a temp B-tree for the
+        ordering — 0.40 s, and growing with the table. Walking the carousel index
+        instead is 0.063 s and stops at the LIMIT. `ANALYZE` does not change its mind.
+        The hint is safe because `INDEXES` creates that index on every `open`.
         """
-        ranked = sorted(source_scores, key=lambda name: -source_scores[name])
-        if ranked:
-            best = source_scores[ranked[0]]
-            branches = " ".join(
-                f"WHEN ? THEN {_cold_stride(source_scores[name], best)}" for name in ranked
-            )
-            stride = f"CASE source {branches} ELSE {_UNRANKED_STRIDE} END"
-            params: tuple[Any, ...] = (*ranked, limit)
-        else:
-            stride, params = "1", (limit,)
-        protocol_order = (
-            "CASE protocol WHEN 'socks5' THEN 0 WHEN 'socks4' THEN 1 "
-            "WHEN 'unknown' THEN 2 ELSE 3 END"
-        )
         return await self._proxies(
-            f"""SELECT * FROM (
-                    SELECT *, ROW_NUMBER() OVER (
-                        PARTITION BY source ORDER BY {protocol_order}, id
-                    ) AS cold_round
-                    FROM proxies WHERE last_check_at IS NULL
-                )
-                ORDER BY cold_round * ({stride}), {protocol_order}, id
-                LIMIT ?""",
-            params,
+            """SELECT * FROM proxies INDEXED BY idx_proxies_carousel
+               WHERE checks_ok = 0 AND alive = 0
+               ORDER BY last_check_at LIMIT ?""",
+            (limit,),
         )
 
     async def fetch_hot(self, limit: int) -> list[Proxy]:
@@ -455,12 +469,25 @@ class Storage:
     # ─── maintenance ───────────────────────────────────────────────────────
 
     async def prune(self, fail_streak_delete: int, stale_unseen_days: int) -> int:
+        """Two different deaths, and they need two different rules.
+
+        `fail_streak` retires a proxy that *worked* and has now failed that many times
+        running. It is scoped to `checks_ok > 0` deliberately: back when a candidate got
+        exactly one probe in its life, nothing else could ever reach the threshold, but
+        the carousel re-tries everything, so an unscoped rule would scythe the entire
+        backlog on a ten-pass cycle — and the next scrape would put every one of those
+        addresses straight back, at the front of the queue, having learned nothing.
+
+        A candidate that has never answered is retired by its sources instead: when no
+        list has carried it for `stale_unseen_days`, it is gone. That is the honest
+        signal, because it is the one that does not depend on our own probe luck.
+        """
         cutoff = (datetime.now(UTC) - timedelta(days=stale_unseen_days)).strftime(
             "%Y-%m-%dT%H:%M:%SZ"
         )
         cursor = await self.db.execute(
             """DELETE FROM proxies
-               WHERE fail_streak >= ?
+               WHERE (checks_ok > 0 AND fail_streak >= ?)
                   OR (alive = 0 AND last_seen_in_source_at < ?)""",
             (fail_streak_delete, cutoff),
         )
@@ -528,8 +555,12 @@ class Storage:
     async def pool_counts(self, fail_streak_quarantine: int) -> dict[str, int]:
         row = (
             await self._rows(
+                # `carousel` is what the cold queue can actually serve, and it is the
+                # honest backlog reading now that the queue re-tries. `unchecked` stays
+                # as the narrower "never tried even once", which sits near zero.
                 """SELECT COUNT(*) AS total,
                           SUM(last_check_at IS NULL) AS unchecked,
+                          SUM(checks_ok = 0 AND alive = 0) AS carousel,
                           SUM(alive) AS alive,
                           SUM(alive AND google_clean) AS google_clean,
                           SUM(alive AND dual_clean) AS youtube_clean,
@@ -543,6 +574,7 @@ class Storage:
             for k in (
                 "total",
                 "unchecked",
+                "carousel",
                 "alive",
                 "google_clean",
                 "youtube_clean",

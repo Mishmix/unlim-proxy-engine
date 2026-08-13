@@ -533,7 +533,7 @@ FORM: single-line mimic panel, candidate 3 of the grounded list, seed key 7285d8
       <div class="stage" data-role="backlog">
         <span class="stage-legend">бэклог</span>
         <b class="stage-value num" id="sBacklog">—</b>
-        <span class="stage-sub" id="sBacklogSub">ждут первой проверки</span>
+        <span class="stage-sub" id="sBacklogSub">в карусели проверок</span>
         <span class="level"><i id="lBacklog" style="width:0"></i></span>
       </div>
 
@@ -847,8 +847,12 @@ function renderMimic(d) {
   stage('sSources', d.sources.length, d.sources.length > 0);
   $('sSourcesSub').textContent = 'списков в опросе';
 
-  stage('sBacklog', pool.unchecked, pool.unchecked > 0);
-  $('lBacklog').style.width = pool.total ? (100 * pool.unchecked / pool.total).toFixed(1) + '%' : '0';
+  // The backlog vessel reads the carousel, not `unchecked`. The cold queue re-tries
+  // everything that has never answered, so "never tried even once" sits near zero and
+  // would draw an empty vessel over three quarters of a million rows in rotation.
+  const carousel = pool.carousel ?? pool.unchecked;
+  stage('sBacklog', carousel, carousel > 0);
+  $('lBacklog').style.width = pool.total ? (100 * carousel / pool.total).toFixed(1) + '%' : '0';
   $('sBacklogSub').textContent = 'из ' + int(pool.total) + ' адресов';
 
   stage('sAlive', pool.alive, pool.alive > 0);

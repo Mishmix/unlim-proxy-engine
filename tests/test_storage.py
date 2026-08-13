@@ -66,40 +66,50 @@ async def test_only_search_ok_sets_google_clean(storage):
         assert row["google_clean"] == expected, status
 
 
-async def test_cold_queue_gives_better_sources_proportionally_more_slots(storage):
-    """Ordering is a stride, not a hard rank: every source appears, a good one just
-    appears more often. Supply is equal here so the shares reflect only the weights."""
-    await storage.upsert_candidates(
-        [Candidate(f"203.0.113.{i}", 8080, "junk", "socks5") for i in range(1, 61)]
-        + [Candidate(f"198.51.100.{i}", 8080, "good", "socks5") for i in range(1, 61)]
-        + [Candidate(f"192.0.2.{i}", 8080, "mid", "socks5") for i in range(1, 61)]
-    )
-    weights = {"good": 0.8, "mid": 0.2, "junk": 0.001}
-    window = [p.source for p in await storage.fetch_cold(60, weights)]
-    share = {name: window.count(name) for name in weights}
-    assert share["good"] > share["mid"] > share["junk"] >= 1, share
-
-
-async def test_cold_queue_puts_socks5_first_within_a_round(storage):
-    await storage.upsert_candidates(
-        [
-            Candidate("198.51.100.1", 8080, "good", None),
-            Candidate("198.51.100.2", 1080, "good", "socks5"),
-        ]
-    )
-    assert (await storage.fetch_cold(1, {"good": 0.9}))[0].protocol == "socks5"
-
-
-async def test_cold_queue_survives_an_empty_source_ranking(storage):
+async def test_cold_queue_returns_a_fresh_candidate(storage):
     await one_proxy(storage)
-    assert len(await storage.fetch_cold(5, {})) == 1
+    assert len(await storage.fetch_cold(5)) == 1
 
 
-async def test_checked_proxies_leave_the_cold_queue(storage):
+async def test_only_answering_leaves_the_cold_queue(storage):
+    """A failed check must NOT retire the address.
+
+    This is the bug that cost the live pool nearly everything: the queue selected on
+    `last_check_at IS NULL`, so one miss retired an address forever, and neither `warm`
+    nor `quarantine` would take it either — both require `checks_ok > 0`. On the
+    production database 782 127 of 782 530 rows sat in no queue at all. A free proxy
+    blinks; one sample is not a verdict.
+    """
     proxy_id = await one_proxy(storage)
     await storage.record_l1(proxy_id, False, None, "0", 0.0, 0.0)
     await storage.commit()
-    assert await storage.fetch_cold(5, {}) == []
+    assert [p.id for p in await storage.fetch_cold(5)] == [proxy_id]
+
+    await storage.record_l1(proxy_id, True, 500, "01", 0.5, 40.0)
+    await storage.commit()
+    assert await storage.fetch_cold(5) == []
+
+
+async def test_cold_queue_serves_the_longest_unchecked_first(storage):
+    """Never-tried before re-tried, and among re-tried the one waiting longest."""
+    await storage.upsert_candidates(
+        [
+            Candidate("203.0.113.1", 1080, "src", "socks5"),
+            Candidate("203.0.113.2", 1080, "src", "socks5"),
+            Candidate("203.0.113.3", 1080, "src", "socks5"),
+        ]
+    )
+    by_host = {r["host"]: r["id"] for r in await storage._rows("SELECT id, host FROM proxies")}
+    for host, stamp in (("203.0.113.2", "2026-01-01T00:00:00Z"), ("203.0.113.1", "2020-01-01Z")):
+        await storage.db.execute(
+            "UPDATE proxies SET last_check_at = ?, checks_total = 1, fail_streak = 1 "
+            "WHERE id = ?",
+            (stamp, by_host[host]),
+        )
+    await storage.commit()
+
+    order = [p.host for p in await storage.fetch_cold(5)]
+    assert order == ["203.0.113.3", "203.0.113.1", "203.0.113.2"]
 
 
 async def test_handshake_result_rewrites_an_unknown_protocol(storage):
@@ -145,12 +155,37 @@ async def test_prune_removes_only_hopeless_proxies(storage):
     doomed = (
         await storage._rows("SELECT id FROM proxies WHERE host = '203.0.113.9'")
     )[0]["id"]
-    await storage.db.execute("UPDATE proxies SET fail_streak = 10 WHERE id = ?", (doomed,))
+    await storage.db.execute(
+        "UPDATE proxies SET fail_streak = 10, checks_ok = 1 WHERE id = ?", (doomed,)
+    )
     await storage.commit()
 
     assert await storage.prune(fail_streak_delete=10, stale_unseen_days=7) == 1
     remaining = await storage._rows("SELECT id FROM proxies")
     assert [r["id"] for r in remaining] == [keep]
+
+
+async def test_prune_does_not_scythe_the_carousel(storage):
+    """A candidate that has never answered is retired by its sources, not by our probe
+    luck. The carousel re-tries everything, so an unscoped `fail_streak` rule would
+    delete the entire backlog every ten passes — and the next scrape would put it all
+    straight back, at the front of the queue, having learned nothing."""
+    proxy_id = await one_proxy(storage)
+    await storage.db.execute(
+        "UPDATE proxies SET fail_streak = 40, checks_total = 40 WHERE id = ?", (proxy_id,)
+    )
+    await storage.commit()
+
+    assert await storage.prune(fail_streak_delete=10, stale_unseen_days=7) == 0
+    assert [p.id for p in await storage.fetch_cold(5)] == [proxy_id]
+
+    # Sources dropping it is what retires it.
+    await storage.db.execute(
+        "UPDATE proxies SET last_seen_in_source_at = '2020-01-01T00:00:00Z' WHERE id = ?",
+        (proxy_id,),
+    )
+    await storage.commit()
+    assert await storage.prune(fail_streak_delete=10, stale_unseen_days=7) == 1
 
 
 # ─── batched writes and the added columns ──────────────────────────────────
@@ -184,17 +219,75 @@ async def test_record_l1_many_tolerates_an_empty_batch(storage):
     await storage.record_l1_many([])
 
 
+async def yt_flags(storage) -> tuple[int, int, int, int]:
+    row = (await storage._rows("SELECT * FROM proxies"))[0]
+    return (
+        row["parser_clean"],
+        row["aiohttp_clean"],
+        row["dual_clean"],
+        row["yt_fail_streak"],
+    )
+
+
 async def test_youtube_verdict_round_trips(storage):
     proxy_id = await one_proxy(storage)
     await storage.record_l1(proxy_id, True, 500, "1", 1.0, 70.0)
-    await storage.record_yt(proxy_id, True, False)
+    await storage.record_yt_many([(proxy_id, True, False)], 2)
     await storage.commit()
-    row = (await storage._rows("SELECT * FROM proxies"))[0]
-    assert (row["parser_clean"], row["aiohttp_clean"], row["dual_clean"]) == (1, 0, 0)
+    assert await yt_flags(storage) == (1, 0, 0, 0)
 
     due = await storage.fetch_yt_due(10, "2099-01-01T00:00:00Z")
     assert [p.id for p in due] == [proxy_id]
     assert not await storage.fetch_yt_due(10, "2000-01-01T00:00:00Z")
+
+
+async def test_one_failed_youtube_probe_does_not_clear_the_flags(storage):
+    """Hysteresis. Two page loads through a free proxy miss for reasons that have
+    nothing to do with YouTube, and the sweep runs far more often than the pool turns
+    over — so clearing on the first miss made `?target=youtube` collapse to zero on a
+    beat and forced the client onto less-verified proxies."""
+    proxy_id = await one_proxy(storage)
+    await storage.record_l1(proxy_id, True, 500, "1", 1.0, 70.0)
+    await storage.record_yt_many([(proxy_id, True, True)], 2)
+    await storage.commit()
+    assert await yt_flags(storage) == (1, 1, 1, 0)
+
+    await storage.record_yt_many([(proxy_id, False, False)], 2)
+    await storage.commit()
+    assert await yt_flags(storage) == (1, 1, 1, 1), "one miss must not clear the set"
+
+    await storage.record_yt_many([(proxy_id, False, False)], 2)
+    await storage.commit()
+    assert await yt_flags(storage) == (0, 0, 0, 2), "two in a row is a verdict"
+
+
+async def test_a_passing_probe_resets_the_youtube_fail_streak(storage):
+    proxy_id = await one_proxy(storage)
+    await storage.record_l1(proxy_id, True, 500, "1", 1.0, 70.0)
+    await storage.record_yt_many([(proxy_id, False, False)], 2)
+    await storage.record_yt_many([(proxy_id, True, False)], 2)
+    await storage.commit()
+    assert await yt_flags(storage) == (1, 0, 0, 0)
+
+
+async def test_youtube_queue_serves_never_probed_before_re_probes(storage):
+    """Regression: the queue led with `dual_clean DESC`, so every sweep re-tested the
+    proxies already in the set before it would look at one new candidate. The set could
+    only shrink — it re-litigated its own members and never grew."""
+    await storage.upsert_candidates(
+        [
+            Candidate("203.0.113.7", 1080, "src", "socks5"),  # already in the set
+            Candidate("203.0.113.8", 1080, "src", "socks5"),  # never probed
+        ]
+    )
+    ids = {r["host"]: r["id"] for r in await storage._rows("SELECT id, host FROM proxies")}
+    for host in ids:
+        await storage.record_l1(ids[host], True, 500, "1", 1.0, 70.0)
+    await storage.record_yt_many([(ids["203.0.113.7"], True, True)], 2)
+    await storage.commit()
+
+    due = await storage.fetch_yt_due(10, "2099-01-01T00:00:00Z")
+    assert [p.host for p in due] == ["203.0.113.8", "203.0.113.7"]
 
 
 async def test_open_adds_columns_to_a_database_created_before_they_existed(tmp_path):
@@ -229,34 +322,6 @@ async def test_open_adds_columns_to_a_database_created_before_they_existed(tmp_p
         assert await reopened.fetch_yt_due(5, "2099-01-01T00:00:00Z") == []
     finally:
         await reopened.close()
-
-
-async def test_cold_queue_samples_every_source_before_repeating_one(storage):
-    """Regression: a 20 000-row window on the live database went entirely to two
-    sources, and 15 668 of those checks came back empty. One source must not be able
-    to starve the rest before its hit rate has been measured."""
-    await storage.upsert_candidates(
-        [Candidate(f"203.0.113.{i}", 8080, "flood", "socks5") for i in range(1, 60)]
-        + [Candidate("198.51.100.1", 8080, "small_a", "socks5")]
-        + [Candidate("198.51.100.2", 8080, "small_b", "socks5")]
-    )
-    batch = await storage.fetch_cold(6, {"flood": 0.02, "small_a": 0.02, "small_b": 0.02})
-    # Equal weights, so the first round covers every source before the big one recurs.
-    assert {p.source for p in batch[:3]} == {"flood", "small_a", "small_b"}
-    assert [p.source for p in batch[3:]] == ["flood"] * 3
-
-
-async def test_a_source_scored_to_zero_still_gets_occasional_slots(storage):
-    """`cold_queue_weight` zeroes a proven-bad source. It must be rare, not silent —
-    a dead list still contributes addresses no other list carries."""
-    await storage.upsert_candidates(
-        [Candidate(f"203.0.113.{i}", 8080, "dead", "socks5") for i in range(1, 40)]
-        + [Candidate(f"198.51.100.{i}", 8080, "live", "socks5") for i in range(1, 40)]
-    )
-    batch = await storage.fetch_cold(40, {"live": 0.3, "dead": 0.0})
-    sources = [p.source for p in batch]
-    assert sources.count("dead") >= 1
-    assert sources.count("live") > sources.count("dead") * 4
 
 
 async def test_scraper_keeps_network_out_of_the_database_lock(storage, monkeypatch):

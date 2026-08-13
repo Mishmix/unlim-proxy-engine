@@ -20,8 +20,6 @@ CLIENT_FAILURE_DECAY_SEC = 3600
 DECAY = 0.9
 """Per-step decay of the sliding uptime window: the newest check weighs ~8x the oldest."""
 
-SOURCE_MIN_SAMPLE = 1000
-SOURCE_BAD_SCORE = 0.005
 
 
 def uptime_ratio(history: str) -> float:
@@ -83,14 +81,3 @@ def source_score(stats: SourceStats) -> float:
     return stats.alive_total / max(stats.fetched_total, 1)
 
 
-def cold_queue_weight(stats: SourceStats | None, priority: int) -> float:
-    """Ordering hint for the cold queue.
-
-    A source that has not yet had `SOURCE_MIN_SAMPLE` candidates checked has no
-    meaningful hit rate, so its configured priority stands in. Sources proven bad go
-    to the back of the queue but are never disabled — they still contribute unique IPs.
-    """
-    if stats is None or stats.fetched_total < SOURCE_MIN_SAMPLE:
-        return (5 - min(max(priority, 1), 4)) / 100
-    value = source_score(stats)
-    return value if value >= SOURCE_BAD_SCORE else 0.0

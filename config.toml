@@ -62,8 +62,17 @@ warm_interval_sec = 300
 warm_concurrency = 200
 l2_interval_sec = 60      # sweep cadence; each proxy is still gated by checker.l2_min_interval_sec
 l2_concurrency = 30
-yt_interval_sec = 120     # backs the ?target= filter; gated by checker.yt_min_interval_sec
-yt_concurrency = 20
+# Backs the ?target= filter; each proxy is still gated by checker.yt_min_interval_sec.
+# yt_batch has to cover the whole live pool inside that window, or the set the filter
+# serves is whatever fraction of the pool the sweep last reached. At 480 per 60 s that
+# is 28 800 probes per re-probe window against a pool in the low thousands.
+yt_interval_sec = 60
+yt_concurrency = 60
+yt_batch = 480
+# Consecutive failed probes before a proxy loses its YouTube flags. One miss is noise —
+# two page loads through a free proxy fail for reasons unrelated to YouTube — and
+# clearing on the first one is what made ?target=youtube collapse to zero on a beat.
+yt_fail_grace = 2
 quarantine_interval_sec = 1800
 quarantine_concurrency = 50
 fail_streak_quarantine = 3

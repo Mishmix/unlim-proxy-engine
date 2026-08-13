@@ -5,7 +5,6 @@ import pytest
 from unlimproxy.models import Proxy, SourceStats
 from unlimproxy.scoring import (
     client_failure_penalty,
-    cold_queue_weight,
     latency_factor,
     score,
     source_score,
@@ -147,19 +146,3 @@ def test_source_score_is_alive_over_fetched():
         0.0672
     )
     assert source_score(SourceStats("empty")) == 0.0
-
-
-def test_cold_weight_falls_back_to_priority_below_the_sample_threshold():
-    thin = SourceStats("x", fetched_total=999, alive_total=999)
-    assert cold_queue_weight(thin, priority=1) > cold_queue_weight(thin, priority=4)
-    assert cold_queue_weight(None, priority=1) == pytest.approx(0.04)
-
-
-def test_cold_weight_uses_the_real_hit_rate_once_proven():
-    good = SourceStats("g", fetched_total=2000, alive_total=200)
-    assert cold_queue_weight(good, priority=4) == pytest.approx(0.1)
-
-
-def test_proven_bad_source_sinks_to_the_back_but_is_not_disabled():
-    bad = SourceStats("b", fetched_total=5000, alive_total=4)
-    assert cold_queue_weight(bad, priority=1) == 0.0
