@@ -66,9 +66,31 @@ def classify_google(status: int | None, body: str, cfg: CheckerCfg) -> GoogleSta
 
 
 class Checker:
+    """One instance per process, and the process-wide budget lives here.
+
+    Every queue caps its own concurrency, and for a long time that read as if the
+    service was bounded. It is not: the queues run as independent loops against one
+    event loop and one CPU quota, so what actually hits the network is their *sum*.
+    Cold 400 plus hot 200 plus warm 200 plus quarantine 50 plus L2 30 plus YouTube 60
+    is 940 simultaneous TLS handshakes on a 1.2-CPU container.
+
+    Past the quota this fails in the worst possible way — silently and backwards. The
+    timeouts are wall clock, so a connection waiting for CPU to finish its handshake
+    burns `connect_timeout_sec` sitting in the scheduler's run queue and is recorded as
+    a dead proxy. Measured on the live service: a hot sweep of 1569 healthy proxies
+    came back with 322 alive, the pool fell from 1569 to 87 in four minutes, and a
+    direct re-probe of the "dead" ones found 72.5 % of them answering. Nothing was
+    wrong with the proxies or with the checker — only with how many of them it was
+    asked to do at once.
+
+    So the gate is here rather than in any one queue: it is the only place that sees
+    every proxied request the process makes.
+    """
+
     def __init__(self, cfg: CheckerCfg) -> None:
         self.cfg = cfg
         self.own_ip: str | None = None
+        self._gate = asyncio.Semaphore(cfg.max_inflight)
 
     async def detect_own_ip(self) -> str | None:
         """One direct request at startup; the anonymity check compares against it."""
@@ -101,18 +123,19 @@ class Checker:
         order: list[Protocol] = (
             [protocol] if protocol in _PROXY_TYPES else list(self.cfg.protocol_probe_order)
         )
-        if (len(order) > 1 or prefilter) and not await self._tcp_reachable(host, port):
-            # Most candidates are simply unreachable. One TCP probe settles that for
-            # all three protocols instead of burning three connect timeouts.
-            return L1Result(ok=False)
-        for candidate in order:
-            started = time.monotonic()
-            if await self._request_204(host, port, candidate):
-                return L1Result(
-                    ok=True,
-                    protocol=candidate,
-                    latency_ms=int((time.monotonic() - started) * 1000),
-                )
+        async with self._gate:
+            if (len(order) > 1 or prefilter) and not await self._tcp_reachable(host, port):
+                # Most candidates are simply unreachable. One TCP probe settles that
+                # for all three protocols instead of burning three connect timeouts.
+                return L1Result(ok=False)
+            for candidate in order:
+                started = time.monotonic()
+                if await self._request_204(host, port, candidate):
+                    return L1Result(
+                        ok=True,
+                        protocol=candidate,
+                        latency_ms=int((time.monotonic() - started) * 1000),
+                    )
         return L1Result(ok=False, protocol=protocol if protocol in _PROXY_TYPES else None)
 
     async def _tcp_reachable(self, host: str, port: int) -> bool:
@@ -149,6 +172,7 @@ class Checker:
         url = f"{self.cfg.l2_url}?{urlencode({'q': query})}"
         try:
             async with (
+                self._gate,
                 self._session(host, port, protocol, self.cfg.l2_total_timeout_sec) as session,
                 session.get(url, allow_redirects=True) as response,
             ):
@@ -174,6 +198,7 @@ class Checker:
         """
         try:
             async with (
+                self._gate,
                 self._session(host, port, protocol, self.cfg.yt_total_timeout_sec) as session,
                 session.get(url, allow_redirects=True) as response,
             ):
@@ -225,6 +250,7 @@ class Checker:
     async def _fetch(self, host: str, port: int, protocol: str, url: str) -> str | None:
         try:
             async with (
+                self._gate,
                 self._session(host, port, protocol, self.cfg.l2_total_timeout_sec) as session,
                 session.get(url) as response,
             ):

@@ -53,6 +53,7 @@ class CheckerCfg(BaseModel):
     l2_url: str = "https://www.google.com/search"
     connect_timeout_sec: float = 5
     tcp_probe_timeout_sec: float = 2
+    max_inflight: int = 250
     l1_total_timeout_sec: float = 8
     l2_total_timeout_sec: float = 12
     l2_min_interval_sec: int = 600

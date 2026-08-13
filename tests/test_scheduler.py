@@ -72,3 +72,44 @@ async def test_an_unknown_proxy_is_rejected_and_queues_nothing(scheduler):
 
 async def test_the_recheck_loop_is_a_no_op_when_nothing_was_reported(scheduler):
     await scheduler._report_once()
+
+
+async def test_the_checker_caps_total_in_flight_checks_across_every_queue(tmp_path):
+    """Per-queue limits add up; only a process-wide gate bounds the sum.
+
+    Regression from the live service: cold 400 + hot 200 + warm 200 + quarantine 50 +
+    L2 30 + YouTube 60 put 940 simultaneous TLS handshakes on a 1.2-CPU container.
+    The timeouts are wall clock, so connections waiting for CPU burned their connect
+    budget in the scheduler's run queue and were recorded as dead proxies — a sweep of
+    1569 healthy proxies returned 322 alive and the pool fell to 87 in four minutes.
+    """
+    import asyncio
+
+    from unlimproxy.checker import Checker, gather_limited
+    from unlimproxy.config import Settings
+
+    settings = Settings(sources=[])
+    settings.checker.max_inflight = 5
+    checker = Checker(settings.checker)
+
+    peak = 0
+    live = 0
+
+    async def fake_tcp(host, port):
+        nonlocal peak, live
+        live += 1
+        peak = max(peak, live)
+        await asyncio.sleep(0.01)
+        live -= 1
+        return False
+
+    checker._tcp_reachable = fake_tcp
+
+    # Three queues asking for far more than the gate allows, all at once.
+    await asyncio.gather(
+        gather_limited([checker.check_l1(f"10.0.0.{i}", 1080, None) for i in range(40)], 40),
+        gather_limited([checker.check_l1(f"10.0.1.{i}", 1080, None) for i in range(40)], 40),
+        gather_limited([checker.check_l1(f"10.0.2.{i}", 1080, None) for i in range(40)], 40),
+    )
+    assert peak <= 5, f"gate leaked: {peak} concurrent against a cap of 5"
+    assert peak > 1, "the gate must not serialise the checks either"
