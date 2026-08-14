@@ -77,6 +77,9 @@ class ReportBody(BaseModel):
     reason: str | None = None
 
 
+_stats_cache: dict[str, tuple[float, dict]] = {}
+
+
 def filters(
     limit: Annotated[int, Query(ge=1, le=100000)] = 20,
     target: Annotated[Target | None, Query(description=TARGET_HELP)] = None,
@@ -311,10 +314,18 @@ def create_app(settings: Settings, scheduler: Scheduler) -> FastAPI:
 
     @app.get("/v1/stats", dependencies=guard, summary="Pool and source statistics")
     async def stats():
+        # Six full scans of a 785 000-row table: `pool_counts` plus a GROUP BY per
+        # breakdown. Measured 1.0 s warm and 12.5 s cold, and it is a dashboard number
+        # nobody reads twice a second — while `/v1/proxies`, the path the clients
+        # actually use, answers in 11-77 ms off the in-memory pool. So it is cached
+        # rather than optimised; a thirty-second-old count is a fine dashboard.
+        cached = _stats_cache.get("v")
+        if cached and time.monotonic() - cached[0] < 30:
+            return cached[1]
         storage = scheduler.storage
         counts = await storage.pool_counts(settings.queues.fail_streak_quarantine)
         sources = await storage.load_sources()
-        return {
+        payload = {
             "pool": counts,
             "by_protocol": await storage.group_counts("protocol"),
             "by_country": await storage.group_counts("country"),
@@ -339,6 +350,8 @@ def create_app(settings: Settings, scheduler: Scheduler) -> FastAPI:
             "uptime_sec": int(time.time() - scheduler.started_at),
             "last_scrape_at": scheduler.last_scrape_at,
         }
+        _stats_cache["v"] = (time.monotonic(), payload)
+        return payload
 
     @app.get("/healthz", summary="Liveness probe")
     async def healthz():

@@ -93,7 +93,9 @@ cold_window_batches = 10    # rows pulled per cold query, in units of cold_batch
 hot_interval_sec = 90
 hot_concurrency = 200
 hot_batch = 6000
-warm_interval_sec = 300
+# Тёплая очередь — те, кто отвалился один-два раза подряд, то есть самые вероятные
+# возвраты из всех. Держать её медленнее карантина смысла нет.
+warm_interval_sec = 60
 warm_concurrency = 200
 l2_interval_sec = 60      # sweep cadence; each proxy is still gated by checker.l2_min_interval_sec
 l2_concurrency = 20

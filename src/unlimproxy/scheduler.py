@@ -150,6 +150,7 @@ class Scheduler:
             )
         if batch:
             await self._run_l1(batch, self.settings.queues.warm_concurrency, "warm")
+            await self.rebuild_pool()
 
     async def _quarantine_once(self) -> None:
         async with self._db_lock:
