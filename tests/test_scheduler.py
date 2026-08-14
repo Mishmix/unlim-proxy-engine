@@ -164,3 +164,30 @@ async def test_page_loads_cannot_starve_the_liveness_checks():
     )
     assert heavy_peak <= 3, f"heavy budget leaked: {heavy_peak} concurrent against a cap of 3"
     assert l1_done == 200, "liveness checks must not be starved by the page loads"
+
+
+def test_the_proven_proxies_are_swept_faster_than_they_blink():
+    """The pool sat at 85 alive while 4 238 proven addresses went unchecked.
+
+    Measured on the live database (14.08): 785 832 rows, 4 323 of which have ever
+    answered a check, 3 829 of those in quarantine. Re-probing 600 of them minutes
+    after the service marked them dead found 1.8 % answering — against 0.55 % for a
+    2 000-row window of the cold carousel. Free proxies blink; a proxy that answered
+    once is worth three of an address that never has, and there are only four
+    thousand of them against three quarters of a million.
+
+    At the old settings — 200 rows per 1800 s — one cycle took nine and a half hours,
+    so nearly every one of those returns was missed. The invariant is that the whole
+    proven set gets re-probed several times an hour.
+    """
+    from unlimproxy.config import load_settings
+
+    q = load_settings("config.toml").queues
+    proven = 4_500  # measured, and bounded: it only grows as addresses first answer
+    cycles_per_hour = (3600 / q.quarantine_interval_sec) * q.quarantine_batch / proven
+    assert cycles_per_hour >= 4, f"quarantine cycles only {cycles_per_hour:.1f}x per hour"
+
+    # Deletion is counted in probes, so it has to move with the cadence or a faster
+    # sweep silently becomes a faster shredder of the only proven addresses we have.
+    hours_before_delete = q.fail_streak_delete * q.quarantine_interval_sec / 3600
+    assert hours_before_delete >= 4, f"a proven proxy is deleted after {hours_before_delete:.1f} h"

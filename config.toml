@@ -108,10 +108,18 @@ yt_batch = 240
 # two page loads through a free proxy fail for reasons unrelated to YouTube — and
 # clearing on the first one is what made ?target=youtube collapse to zero on a beat.
 yt_fail_grace = 2
-quarantine_interval_sec = 1800
-quarantine_concurrency = 50
+# Карантин — единственные доказанные адреса в базе. Замер 14.08: из 785 832 строк
+# когда-либо отвечали 4 323, из них 3 829 лежат здесь. Перепроверка 600 таких через
+# минуты после того, как сервис записал их в мёртвые: 1,8% отвечают. У холодной
+# карусели тот же показатель 0,55%, то есть тут в три раза гуще — а метётся она в
+# триста раз медленнее. При 200 штук за 1800 с полный круг занимал 9,5 часов.
+quarantine_interval_sec = 120
+quarantine_concurrency = 150
+quarantine_batch = 5000
 fail_streak_quarantine = 3
-fail_streak_delete = 10
+# Считается в проверках, поэтому должен идти вместе с частотой выше: при проходе раз
+# в 2 минуты 240 промахов подряд — это 8 часов непрерывного отсутствия.
+fail_streak_delete = 240
 stale_unseen_days = 7
 
 [geo]

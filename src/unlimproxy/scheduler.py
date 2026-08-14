@@ -154,12 +154,13 @@ class Scheduler:
     async def _quarantine_once(self) -> None:
         async with self._db_lock:
             batch = await self.storage.fetch_quarantine(
-                self.settings.queues.quarantine_concurrency * 4,
+                self.settings.queues.quarantine_batch,
                 self.settings.queues.fail_streak_quarantine,
                 _ago(self.settings.queues.quarantine_interval_sec),
             )
         if batch:
             await self._run_l1(batch, self.settings.queues.quarantine_concurrency, "quarantine")
+            await self.rebuild_pool()
 
     async def _l2_once(self) -> None:
         """Only the hot pool, never more often than `l2_min_interval_sec` per proxy —
