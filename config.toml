@@ -681,11 +681,17 @@ priority = 3
 # 146 783 new rows; that is three times the check load for the same machines.
 
 [[sources]]
+# Выключен 14.08 по замеру отдачи: 146 399 строк в базе, из них когда-либо ответили
+# 29 (0,02%), живых сейчас 1. Это 19% всей карусели ради одного прокси. Для сравнения
+# zloi_socks5 — 531 строка, 23 ответивших (4,33%), 10 живых и 8 из них под YouTube.
+# Строки уйдут сами: без обновления last_seen_in_source_at их через stale_unseen_days
+# заберёт prune, и холодная очередь начнёт обходить круг заметно быстрее.
 name = "worldpool_hijacked"          # +152 465 endpoints
 url = "https://raw.githubusercontent.com/CelestialBrain/worldpool/main/proxies/hijacked.txt"
 parser = "scan"
 trust_protocol = false
 priority = 4
+enabled = false
 
 [[sources]]
 name = "akbarali_mixed"              # +128 606; the repo's http/socks4/socks5 files are byte-identical
@@ -695,11 +701,13 @@ trust_protocol = false
 priority = 4
 
 [[sources]]
+# Выключен 14.08 там же: 62 002 строки, ответили 34 (0,05%), живых 14.
 name = "limingda_csv"                # +99 929; CSV rows, protocol in column 1
 url = "https://raw.githubusercontent.com/LiMingda-101212/Proxy-Pool-Actions/main/proxies.csv"
 parser = "scan"
 trust_protocol = true
 priority = 4
+enabled = false
 
 [[sources]]
 name = "tsprnay_all"                 # +17 839; only the `sorted/` tree is still updated
