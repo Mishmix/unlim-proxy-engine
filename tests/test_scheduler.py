@@ -187,7 +187,6 @@ def test_the_proven_proxies_are_swept_faster_than_they_blink():
     cycles_per_hour = (3600 / q.quarantine_interval_sec) * q.quarantine_batch / proven
     assert cycles_per_hour >= 4, f"quarantine cycles only {cycles_per_hour:.1f}x per hour"
 
-    # Deletion is counted in probes, so it has to move with the cadence or a faster
-    # sweep silently becomes a faster shredder of the only proven addresses we have.
-    hours_before_delete = q.fail_streak_delete * q.quarantine_interval_sec / 3600
-    assert hours_before_delete >= 4, f"a proven proxy is deleted after {hours_before_delete:.1f} h"
+    # And retention is expressed in time, so speeding the sweep up cannot turn into
+    # deleting the proven set faster.
+    assert q.proven_stale_days >= 1

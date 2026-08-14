@@ -320,7 +320,7 @@ class Scheduler:
     async def _maintenance_once(self) -> None:
         async with self._db_lock:
             removed = await self.storage.prune(
-                self.settings.queues.fail_streak_delete, self.settings.queues.stale_unseen_days
+                self.settings.queues.proven_stale_days, self.settings.queues.stale_unseen_days
             )
             await self.storage.recompute_source_totals()
         if removed:

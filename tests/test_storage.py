@@ -20,6 +20,12 @@ async def one_proxy(store: Storage, protocol: str | None = "socks5") -> int:
     return rows[0]["id"]
 
 
+def _hours_ago(hours: int) -> str:
+    from datetime import UTC, datetime, timedelta
+
+    return (datetime.now(UTC) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 async def test_upsert_is_idempotent_per_host_port_protocol(storage):
     candidates = [
         Candidate("203.0.113.5", 1080, "a", "socks5"),
@@ -149,18 +155,32 @@ async def test_client_report_targets_an_exact_proxy(storage):
     assert row["last_report_fail_at"] is not None
 
 
-async def test_prune_removes_only_hopeless_proxies(storage):
+async def test_prune_retires_a_proven_proxy_by_time_not_by_probe_count(storage):
+    """Retention is a claim about proxies, not about how fast we happen to sweep.
+
+    Counting consecutive failures made the threshold mean five hours at one probe per
+    thirty minutes and twenty minutes at one probe per two — so speeding the sweep up
+    silently turned it into a shredder of the only proven addresses in the database.
+    """
     keep = await one_proxy(storage)
     await storage.upsert_candidates([Candidate("203.0.113.9", 1080, "src", "socks5")])
     doomed = (
         await storage._rows("SELECT id FROM proxies WHERE host = '203.0.113.9'")
     )[0]["id"]
+    # Worked once, has failed a hundred times since, but only an hour ago.
     await storage.db.execute(
-        "UPDATE proxies SET fail_streak = 10, checks_ok = 1 WHERE id = ?", (doomed,)
+        """UPDATE proxies SET fail_streak = 100, checks_ok = 1, alive = 0,
+                              last_verified_at = ? WHERE id = ?""",
+        (_hours_ago(1), doomed),
     )
     await storage.commit()
+    assert await storage.prune(proven_stale_days=3, stale_unseen_days=7) == 0
 
-    assert await storage.prune(fail_streak_delete=10, stale_unseen_days=7) == 1
+    await storage.db.execute(
+        "UPDATE proxies SET last_verified_at = ? WHERE id = ?", (_hours_ago(96), doomed)
+    )
+    await storage.commit()
+    assert await storage.prune(proven_stale_days=3, stale_unseen_days=7) == 1
     remaining = await storage._rows("SELECT id FROM proxies")
     assert [r["id"] for r in remaining] == [keep]
 
@@ -172,11 +192,12 @@ async def test_prune_does_not_scythe_the_carousel(storage):
     straight back, at the front of the queue, having learned nothing."""
     proxy_id = await one_proxy(storage)
     await storage.db.execute(
-        "UPDATE proxies SET fail_streak = 40, checks_total = 40 WHERE id = ?", (proxy_id,)
+        "UPDATE proxies SET fail_streak = 40, checks_total = 40, checks_ok = 0 WHERE id = ?",
+        (proxy_id,),
     )
     await storage.commit()
 
-    assert await storage.prune(fail_streak_delete=10, stale_unseen_days=7) == 0
+    assert await storage.prune(proven_stale_days=3, stale_unseen_days=7) == 0
     assert [p.id for p in await storage.fetch_cold(5)] == [proxy_id]
 
     # Sources dropping it is what retires it.
@@ -185,7 +206,7 @@ async def test_prune_does_not_scythe_the_carousel(storage):
         (proxy_id,),
     )
     await storage.commit()
-    assert await storage.prune(fail_streak_delete=10, stale_unseen_days=7) == 1
+    assert await storage.prune(proven_stale_days=3, stale_unseen_days=7) == 1
 
 
 # ─── batched writes and the added columns ──────────────────────────────────

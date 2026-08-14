@@ -492,28 +492,35 @@ class Storage:
 
     # ─── maintenance ───────────────────────────────────────────────────────
 
-    async def prune(self, fail_streak_delete: int, stale_unseen_days: int) -> int:
-        """Two different deaths, and they need two different rules.
+    async def prune(self, proven_stale_days: int, stale_unseen_days: int) -> int:
+        """Two different deaths, and they need two different rules — both in time.
 
-        `fail_streak` retires a proxy that *worked* and has now failed that many times
-        running. It is scoped to `checks_ok > 0` deliberately: back when a candidate got
-        exactly one probe in its life, nothing else could ever reach the threshold, but
-        the carousel re-tries everything, so an unscoped rule would scythe the entire
-        backlog on a ten-pass cycle — and the next scrape would put every one of those
-        addresses straight back, at the front of the queue, having learned nothing.
+        A proxy that *worked* is retired when it has not worked for
+        `proven_stale_days`. This used to count consecutive failed probes instead, and
+        that was a bug waiting for the sweep rate to change: the same threshold of 10
+        meant five hours at one probe per thirty minutes and twenty minutes at one
+        probe per two. Retention is a claim about proxies — "gone for three days is
+        gone" — so it has no business being expressed in units of our own sweep rate.
 
         A candidate that has never answered is retired by its sources instead: when no
         list has carried it for `stale_unseen_days`, it is gone. That is the honest
-        signal, because it is the one that does not depend on our own probe luck.
+        signal, because it is the one that does not depend on our own probe luck. The
+        rule stays scoped away from `checks_ok = 0` for the same reason as before —
+        the carousel re-tries everything, and the next scrape would put every deleted
+        address straight back at the front of the queue, having learned nothing.
         """
         cutoff = (datetime.now(UTC) - timedelta(days=stale_unseen_days)).strftime(
             "%Y-%m-%dT%H:%M:%SZ"
         )
+        proven_cutoff = (datetime.now(UTC) - timedelta(days=proven_stale_days)).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
         cursor = await self.db.execute(
             """DELETE FROM proxies
-               WHERE (checks_ok > 0 AND fail_streak >= ?)
-                  OR (alive = 0 AND last_seen_in_source_at < ?)""",
-            (fail_streak_delete, cutoff),
+               WHERE (checks_ok > 0 AND alive = 0
+                      AND COALESCE(last_verified_at, '') < ?)
+                  OR (checks_ok = 0 AND alive = 0 AND last_seen_in_source_at < ?)""",
+            (proven_cutoff, cutoff),
         )
         await self.db.execute("DELETE FROM checks WHERE at < ?", (_minutes_ago(60),))
         await self.db.commit()

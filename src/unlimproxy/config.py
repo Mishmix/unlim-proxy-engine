@@ -106,10 +106,11 @@ class QueuesCfg(BaseModel):
     quarantine_concurrency: int = 150
     quarantine_batch: int = 5000
     fail_streak_quarantine: int = 3
-    # Counted in probes, so it has to move with the cadence above: at one sweep every
-    # two minutes, 240 consecutive misses is eight hours of continuous absence. The old
-    # 10 was five hours at the old cadence and would be twenty minutes at this one.
-    fail_streak_delete: int = 240
+    # How long a proxy that has worked is kept after it stops working. Free proxies
+    # come back, so this is the setting that decides how big the proven set gets — and
+    # the proven set is where the yield is (1.8 % answering at any moment against
+    # 0.55 % for an address that has never answered).
+    proven_stale_days: int = 3
     stale_unseen_days: int = 7
 
 
