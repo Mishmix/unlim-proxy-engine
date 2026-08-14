@@ -102,7 +102,7 @@ class QueuesCfg(BaseModel):
     # within minutes of being marked dead, against 0.55 % for the cold carousel. They
     # blink; they are not gone. At 200 per 1800 s this set took nine and a half hours
     # to cycle once, so almost every one of those returns was missed.
-    quarantine_interval_sec: int = 120
+    quarantine_interval_sec: int = 60
     quarantine_concurrency: int = 150
     quarantine_batch: int = 5000
     fail_streak_quarantine: int = 3
